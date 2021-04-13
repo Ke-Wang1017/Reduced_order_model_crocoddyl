@@ -9,12 +9,10 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
 
         self.m = 95.0
         self.g = 9.81
-        self.ref_vel = np.array([0.0, 0.0])
-        self.foot_location = np.array([0.0, 0.085, 0.0001])
+        self.foot_location = np.array([0.0, 0.0, 0.0001])
         self.costs = costs
-
-    def setRefVel(self, refVel):
-        self.ref_vel = refVel
+        self.u_lb = np.array([10.])
+        self.u_ub = np.array([3.0*self.m*self.g])
 
     def setFootLocation(self, footLocation):
         self.foot_location = footLocation
@@ -22,7 +20,7 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
     def calc(self, data, x, u):
         if u is None:
             u = self.uNone
-        c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x # how do you know cdot is the diff of c?
+        c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x # how do you know cdot is the diff of c? From the Euler integration model
         u_x, u_y, u_z = self.foot_location
         f_z = u.item(0)
 
@@ -34,8 +32,6 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
         # compute the cost residual
         self.costs.calc(data.costs, x, u)
         data.cost = data.costs.cost
-        # data.r = np.matrix(self.costWeights * np.array([f_z, cdot_x-ref_vel_x, cdot_y-ref_vel_y])).T
-        # data.cost = .5* np.asscalar(sum(np.asarray(data.r)**2))
 
     def calcDiff(self, data, x, u):
         c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x
@@ -61,33 +57,65 @@ class DifferentialActionDataVariableHeightPendulum(crocoddyl.DifferentialActionD
 
 
 state = crocoddyl.StateVector(6)
-costs = crocoddyl.CostModelSum(state, 1)
+runningCosts = crocoddyl.CostModelSum(state, 1)
+terminalCosts = crocoddyl.CostModelSum(state, 1)
 
-weights = np.array([0.,0.,0.,10.,10.,10.])
+weights = np.array([0., 0., 0.5, 0., 5., 0.])
 # xRef = np.zeros(6)
-xRef = np.array([0.0, 0.0, 0.0, 0.1, 0.0, 0.0])
-costs.addCost("comTracking", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(weights), xRef, 1), 1e3)
-costs.addCost("uReg", crocoddyl.CostModelControl(state, 1), 1e-3) ## ||u||^2
+xRef = np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0])
+runningCosts.addCost("comTracking", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(weights), xRef, 1), 1e3)
+runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, 1), 1e-3) ## ||u||^2
+terminalCosts.addCost("comTracking", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(weights), xRef, 1), 1e6)
+model1 = DifferentialActionModelVariableHeightPendulum(runningCosts)
+model2 = DifferentialActionModelVariableHeightPendulum(runningCosts)
+model3 = DifferentialActionModelVariableHeightPendulum(runningCosts)
+model4 = DifferentialActionModelVariableHeightPendulum(runningCosts)
+model5 = DifferentialActionModelVariableHeightPendulum(runningCosts)
+modelT = DifferentialActionModelVariableHeightPendulum(terminalCosts)
+model1.setFootLocation(np.array([0.0, 0.0, 0.00001]))
+model2.setFootLocation(np.array([0.0, -0.085, 0.0001]))
+model3.setFootLocation(np.array([0.0, 0.0, 0.0001]))
+model4.setFootLocation(np.array([0.0, 0.085, 0.0001]))
+model5.setFootLocation(np.array([0.0, 0.0, 0.0001]))
+# data = model.createData() # seems not needed for this
+dt = 2e-2
+num_nodes = 25
+m1 = crocoddyl.IntegratedActionModelEuler(model1, dt)
+m2 = crocoddyl.IntegratedActionModelEuler(model2, dt)
+m3 = crocoddyl.IntegratedActionModelEuler(model3, dt)
+m4 = crocoddyl.IntegratedActionModelEuler(model4, dt)
+m5 = crocoddyl.IntegratedActionModelEuler(model5, dt)
+mT = crocoddyl.IntegratedActionModelEuler(modelT)
 
-model = DifferentialActionModelVariableHeightPendulum(costs)
-data = model.createData()
-dt = 1e-3
-num_nodes = 30
-m = crocoddyl.IntegratedActionModelEuler(model, dt)
+locoModel = [m1]*num_nodes
+locoModel += [m2]*num_nodes
+locoModel += [m3]*num_nodes
+locoModel += [m4]*num_nodes
+locoModel += [m5]*num_nodes
+
 x_init = np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0])
 # x_init = np.zeros(6)
-problem = crocoddyl.ShootingProblem(x_init, [m]*num_nodes, m)
-solver = crocoddyl.SolverFDDP(problem)
+problem = crocoddyl.ShootingProblem(x_init, locoModel, mT)
+solver = crocoddyl.SolverBoxFDDP(problem)
+# solver = crocoddyl.SolverFDDP(problem)
 log = crocoddyl.CallbackLogger()
 solver.setCallbacks([log, crocoddyl.CallbackVerbose()])
 t0 = time.time()
 solver.solve()
+
 print 'Time of iteration consumed', time.time()-t0
 
-crocoddyl.plotOCSolution(log.xs, log.us)
-crocoddyl.plotConvergence(log.costs, log.u_regs, log.x_regs, log.grads, log.stops, log.steps)
+crocoddyl.plotOCSolution(log.xs[:], log.us)
+# crocoddyl.plotConvergence(log.costs, log.u_regs, log.x_regs, log.grads, log.stops, log.steps)
 
 
+def plotComMotion(xs):
+    import matplotlib.pyplot as plt
+    plt.rcParams["pdf.fonttype"] = 42
+    plt.rcParams["ps.fonttype"] = 42
+    cx = [x[0] for x in xs]
+    cy = [x[1] for x in xs]
+    plt.plot(cy)
+    plt.show()
 
-
-
+plotComMotion(solver.xs)
