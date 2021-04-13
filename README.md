@@ -1,0 +1,1 @@
+# Reduced_order_model_crocoddyl
