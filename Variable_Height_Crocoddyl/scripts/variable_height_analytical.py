@@ -13,9 +13,9 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
         self.foot_location = np.array([0.0, 0.0, 0.000001])
         self.costs = costs
         self.u_lb = np.array([100.])
-        self.u_ub = np.array([3.0*self.m*self.g])
-        self.state.lb = np.array([-math.inf, -math.inf, 0.3, -math.inf, -math.inf, -self.g])
-        self.state.ub = np.array([math.inf, math.inf, 1.3, 20, 20, 2*self.g])
+        self.u_ub = np.array([5.0*self.m*self.g])
+        self.state.lb = np.array([-1e6, -1e6, 0.3, -1e6, -1e6, -self.g])
+        self.state.ub = np.array([1e6, 1e6, 1.3, 20, 20, 4*self.g])
 
 
     def setFootLocation(self, footLocation):
@@ -64,12 +64,13 @@ state = crocoddyl.StateVector(6)
 runningCosts = crocoddyl.CostModelSum(state, 1)
 terminalCosts = crocoddyl.CostModelSum(state, 1)
 
-weights = np.array([0., 0., 30., 0., 50., 0.1])
+weights = np.array([0., 0., 10., 0., 50., 0.])
+weights_terminal = np.array([0., 0., 100., 0., 5., 0.])
 # xRef = np.zeros(6)
 xRef = np.array([0.0, 0.0, 0.98, 0.0, 0.0, 0.0])
 runningCosts.addCost("comTracking", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(weights), xRef, 1), 1e3)
 runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, 1), 1e-3) ## ||u||^2
-terminalCosts.addCost("comTracking", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(weights), xRef, 1), 1e5)
+terminalCosts.addCost("comTracking", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(weights_terminal), xRef, 1), 1e5)
 model1 = DifferentialActionModelVariableHeightPendulum(runningCosts)
 model2 = DifferentialActionModelVariableHeightPendulum(runningCosts)
 model3 = DifferentialActionModelVariableHeightPendulum(runningCosts)
@@ -81,9 +82,9 @@ model2.setFootLocation(np.array([0.0, 0.0, 0.001]))
 model3.setFootLocation(np.array([0.0, 0.075, 0.001]))
 model4.setFootLocation(np.array([0.0, 0.0, 0.001]))
 # data = model.createData() # seems not needed for this
-dt = 2e-2
-num_nodes_single_support = 40
-num_nodes_double_support = 20
+dt = 1e-2
+num_nodes_single_support = 80
+num_nodes_double_support = 40
 m1 = crocoddyl.IntegratedActionModelEuler(model1, dt)
 m2 = crocoddyl.IntegratedActionModelEuler(model2, dt)
 m3 = crocoddyl.IntegratedActionModelEuler(model3, dt)

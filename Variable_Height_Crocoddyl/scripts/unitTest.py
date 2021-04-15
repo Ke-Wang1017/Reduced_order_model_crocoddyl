@@ -1,6 +1,6 @@
 import crocoddyl
 import numpy as np
-from variable_height_analytical import *
+from variable_height_analytical import DifferentialActionModelVariableHeightPendulum, DifferentialActionDataVariableHeightPendulum
 
 class NumDiffException(Exception):
     """Raised when the NumDiff values are too high"""
@@ -16,9 +16,13 @@ def assertNumDiff(A, B, threshold):
         value = np.linalg.norm(A - B)
         raise NumDiffException("NumDiff exception, with residual of %.4g, above threshold %.4g" % (value, threshold))
 
-
-
-model = DifferentialActionModelVariableHeightPendulum(costs)
+state = crocoddyl.StateVector(6)
+weights = np.array([0., 0., 10., 0., 50., 0.])
+xRef = np.array([0.0, 0.0, 0.98, 0.0, 0.0, 0.0])
+runningCosts = crocoddyl.CostModelSum(state, 1)
+runningCosts.addCost("comTracking", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(weights), xRef, 1), 1e3)
+runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, 1), 1e-3) ## ||u||^2
+model = DifferentialActionModelVariableHeightPendulum(runningCosts)
 data = model.createData()
 
 mnum = crocoddyl.DifferentialActionModelNumDiff(model, False)
