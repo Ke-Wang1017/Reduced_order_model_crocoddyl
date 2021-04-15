@@ -10,10 +10,11 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
 
         self.m = 95.0
         self.g = 9.81
-        self.foot_location = np.array([0.0, 0.0, 0.000001])
+        # self.foot_location = np.array([0.0, 0.0, 0.000001])
         self.costs = costs
         self.u_lb = np.array([100.])
         self.u_ub = np.array([5.0*self.m*self.g])
+
 
 
     def setFootLocation(self, footLocation):
@@ -58,7 +59,7 @@ class DifferentialActionDataVariableHeightPendulum(crocoddyl.DifferentialActionD
         self.costs.shareMemory(self)
 
 
-def createPhaseModel(cop, Wx=np.array([0., 0., 20., 0., 0., 10.]), wxreg=5e-1, wureg=1e-1, wxbox=1e5, dt=2e-2):
+def createPhaseModel(cop, Wx=np.array([0., 0., 5., 0., 5., 5.]), wxreg=5e-2, wureg=5e-2, wxbox=1e5, dt=2e-2):
     state = crocoddyl.StateVector(6)
     runningCosts = crocoddyl.CostModelSum(state, 1)
     xRef = np.array([0.0, 0.0, 0.98, 0.0, 0.0, 0.0])
@@ -72,7 +73,7 @@ def createPhaseModel(cop, Wx=np.array([0., 0., 20., 0., 0., 10.]), wxreg=5e-1, w
     return crocoddyl.IntegratedActionModelEuler(model, dt)
 
 def createTerminalModel(cop):
-    return createPhaseModel(cop, np.array([0., 0., 20., 0., 0., 10.]), wxreg=1e2, dt=0.)
+    return createPhaseModel(cop, np.array([0., 0., 10., 0., 5., 5.]), wxreg=1e1, dt=0.)
 
 m1 = createPhaseModel(np.array([0.0, -0.08, 0.001]))
 m2 = createPhaseModel(np.array([0.0, 0.0, 0.001]))
@@ -98,8 +99,7 @@ log = crocoddyl.CallbackLogger()
 solver.setCallbacks([log, crocoddyl.CallbackVerbose()])
 t0 = time.time()
 u_init = [m.quasiStatic(d, x_init) for m,d in zip(problem.runningModels, problem.runningDatas)]
-# solver.solve([x_init]*(problem.T + 1), u_init, 100) # x init, u init, max iteration
-solver.solve()  # x init, u init, max iteration
+solver.solve([x_init]*(problem.T + 1), u_init, 100) # x init, u init, max iteration
 
 print 'Time of iteration consumed', time.time()-t0
 
