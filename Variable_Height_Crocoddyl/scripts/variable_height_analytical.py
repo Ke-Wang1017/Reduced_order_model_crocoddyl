@@ -5,15 +5,15 @@ import math
 
 class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialActionModelAbstract):
     def __init__(self, costs):
-        crocoddyl.DifferentialActionModelAbstract.__init__(self, crocoddyl.StateVector(6), 1) # nu = 1
+        crocoddyl.DifferentialActionModelAbstract.__init__(self, crocoddyl.StateVector(6), 4) # nu = 1
         self.uNone = np.zeros(self.nu)
 
         self.m = 95.0
         self.g = 9.81
         self.foot_location = np.array([0.0, 0.0, 0.000001])
         self.costs = costs
-        self.u_lb = np.array([100.])
-        self.u_ub = np.array([5.0*self.m*self.g])
+        self.u_lb = np.array([100., -0.05, -0.12, 0.0])
+        self.u_ub = np.array([3.0*self.m*self.g, 0.05, 0.12, 0.2])
 
 
     def setFootLocation(self, footLocation):
@@ -23,8 +23,7 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
         if u is None:
             u = self.uNone
         c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x # how do you know cdot is the diff of c? From the Euler integration model
-        u_x, u_y, u_z = self.foot_location
-        f_z = u.item(0)
+        f_z, u_x, u_y, u_z = u.item(0), u.item(1), u.item(2), u.item(3)
 
         cdotdot_x = f_z * (c_x-u_x) / ((c_z-u_z) * self.m)
         cdotdot_y = f_z * (c_y-u_y) / ((c_z-u_z) * self.m)
@@ -37,8 +36,7 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
 
     def calcDiff(self, data, x, u):
         c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x
-        u_x, u_y, u_z = self.foot_location
-        f_z = u[0].item()
+        f_z, u_x, u_y, u_z = u.item(0), u.item(1), u.item(2), u.item(3)
 
         data.Fx[:, :] = np.array([[f_z/((c_z-u_z)*self.m), 0.0, -f_z*(c_x-u_x)/((c_z-u_z)**2*self.m), 0.0, 0.0, 0.0],
                                   [0.0, f_z/((c_z-u_z)*self.m), -f_z*(c_y-u_y)/((c_z-u_z)**2*self.m), 0.0, 0.0, 0.0],
