@@ -19,9 +19,9 @@ def assertNumDiff(A, B, threshold):
 state = crocoddyl.StateVector(6)
 weights = np.array([0., 0., 10., 0., 50., 0.])
 xRef = np.array([0.0, 0.0, 0.98, 0.0, 0.0, 0.0])
-runningCosts = crocoddyl.CostModelSum(state, 1)
-runningCosts.addCost("comTracking", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(weights), xRef, 1), 1e3)
-runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, 1), 1e-3) ## ||u||^2
+runningCosts = crocoddyl.CostModelSum(state, 4)
+runningCosts.addCost("comTracking", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(weights), xRef, 4), 1e3)
+runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, 4), 1e-3) ## ||u||^2
 model = DifferentialActionModelVariableHeightPendulum(runningCosts)
 data = model.createData()
 
@@ -29,7 +29,7 @@ mnum = crocoddyl.DifferentialActionModelNumDiff(model, False)
 dnum = mnum.createData()
 
 xrand = np.random.rand(6)
-urand = np.random.rand(1)
+urand = np.random.rand(4)
 model.calc(data, xrand, urand)
 model.calcDiff(data, xrand, urand)
 mnum.calc(dnum, xrand, urand)
