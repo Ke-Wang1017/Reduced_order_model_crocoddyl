@@ -10,14 +10,11 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
 
         self.m = 95.0
         self.g = 9.81
-        self.foot_location = np.array([0.0, 0.0, 0.000001])
         self.costs = costs
         self.u_lb = np.array([100., -0.05, -0.12, 0.0])
-        self.u_ub = np.array([3.0*self.m*self.g, 0.05, 0.12, 0.2])
+        self.u_ub = np.array([2.0*self.m*self.g, 0.05, 0.12, 0.05])
 
 
-    def setFootLocation(self, footLocation):
-        self.foot_location = footLocation
 
     def calc(self, data, x, u):
         if u is None:
@@ -41,7 +38,10 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
         data.Fx[:, :] = np.array([[f_z/((c_z-u_z)*self.m), 0.0, -f_z*(c_x-u_x)/((c_z-u_z)**2*self.m), 0.0, 0.0, 0.0],
                                   [0.0, f_z/((c_z-u_z)*self.m), -f_z*(c_y-u_y)/((c_z-u_z)**2*self.m), 0.0, 0.0, 0.0],
                                   [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
-        data.Fu[:] = np.array([(c_x-u_x)/(self.m*(c_z-u_z)), (c_y-u_y)/(self.m*(c_z-u_z)), 1.0/self.m])
+
+        data.Fu[:, :] = np.array([[(c_x-u_x)/(self.m*(c_z-u_z)), -f_z/((c_z-u_z)*self.m), 0., self.m*f_z*(c_x-u_x)/((c_z-u_z)*self.m)**2],
+                                 [(c_y-u_y)/(self.m*(c_z-u_z)), 0., -f_z /((c_z - u_z) * self.m), self.m * f_z * (c_y - u_y) / ((c_z - u_z) * self.m) ** 2],
+                                 [1.0/self.m, 0., 0., 0.]]) # needs to be modified
         self.costs.calcDiff(data.costs, x, u)
 
     def createData(self):
@@ -56,38 +56,40 @@ class DifferentialActionDataVariableHeightPendulum(crocoddyl.DifferentialActionD
         self.costs.shareMemory(self)
 
 
-def createPhaseModel(cop, Wx=np.array([0., 0., 20., 0., 0., 10.]), wxreg=5e-1, wureg=1e-1, wxbox=1e5, dt=2e-2):
+def createPhaseModel(cop, Wx=np.array([0., 0., 100., 0., 1., 100.]), Wu=np.array([0., 10., 20., 1.]), wxreg=1, wureg=1, wxbox=1e5, dt=2e-2):
     state = crocoddyl.StateVector(6)
-    runningCosts = crocoddyl.CostModelSum(state, 1)
-    xRef = np.array([0.0, 0.0, 0.98, 0.0, 0.0, 0.0])
-    ub = np.hstack([cop, np.zeros(3)]) + np.array([0.5, 0.1, 1.2, 5., 5., 5])
-    lb = np.hstack([cop, np.zeros(3)]) + np.array([-0.5, -0.1, 0.7, -5., -5., -5])
-    runningCosts.addCost("comBox", crocoddyl.CostModelState(state, crocoddyl.ActivationModelQuadraticBarrier(crocoddyl.ActivationBounds(lb, ub)), xRef, 1), wxbox)
-    runningCosts.addCost("comReg", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(Wx), xRef, 1), wxreg)
-    runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, 1), wureg) ## ||u||^2
+    runningCosts = crocoddyl.CostModelSum(state, 4)
+    xRef = np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0])
+    uRef = np.hstack([np.zeros(1), cop])
+    ub = np.hstack([cop, np.zeros(3)]) + np.array([0.3, 0.1, 0.95, 5., 5., 3])
+    lb = np.hstack([cop, np.zeros(3)]) + np.array([-0.3, -0.1, 0.75, -5., -5., -3])
+    runningCosts.addCost("comBox", crocoddyl.CostModelState(state, crocoddyl.ActivationModelQuadraticBarrier(crocoddyl.ActivationBounds(lb, ub)), xRef, 4), wxbox)
+    runningCosts.addCost("comReg", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(Wx), xRef, 4), wxreg)
+    runningCosts.addCost("uTrack", crocoddyl.CostModelControl(state, crocoddyl.ActivationModelWeightedQuad(Wu), uRef), wureg) ## ||u||^2
+    runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, 4), wureg*15) ## ||u||^2
     model = DifferentialActionModelVariableHeightPendulum(runningCosts)
-    model.setFootLocation(cop)
     return crocoddyl.IntegratedActionModelEuler(model, dt)
 
 def createTerminalModel(cop):
-    return createPhaseModel(cop, np.array([0., 0., 20., 0., 0., 10.]), wxreg=1e2, dt=0.)
+    return createPhaseModel(cop, Wx=np.array([0., 0., 100., 0., 1., 10.]), wxreg=1e5, dt=0.)
 
-m1 = createPhaseModel(np.array([0.0, -0.08, 0.001]))
-m2 = createPhaseModel(np.array([0.0, 0.0, 0.001]))
-m3 = createPhaseModel(np.array([0.0, 0.08, 0.001]))
-m4 = createPhaseModel(np.array([0.0, 0.0, 0.001]))
+m1 = createPhaseModel(np.array([0.0, 0.0, 0.001]))
+m2 = createPhaseModel(np.array([0.0, -0.08, 0.001]))
+m3 = createPhaseModel(np.array([0.0, 0.0, 0.001]))
+m4 = createPhaseModel(np.array([0.0, 0.08, 0.001]))
+m5 = createPhaseModel(np.array([0.0, 0.0, 0.001]))
 mT = createTerminalModel(np.array([0.0, 0.0, 0.001]))
 # data = model.createData() # seems not needed for this
 
-num_nodes_single_support = 40
-num_nodes_double_support = 20
-locoModel = [m1]*num_nodes_single_support
-locoModel += [m2]*num_nodes_double_support
-locoModel += [m3]*num_nodes_single_support
-locoModel += [m4]*num_nodes_double_support
-# locoModel += [m5]*num_nodes_double_support
+num_nodes_single_support = 50
+num_nodes_double_support = 25
+locoModel = [m1]*num_nodes_double_support
+locoModel += [m2]*num_nodes_single_support
+locoModel += [m3]*num_nodes_double_support
+locoModel += [m4]*num_nodes_single_support
+locoModel += [m5]*num_nodes_double_support
 
-x_init = np.array([0.0, 0.0, 0.981, 0.0, 0.0, 0.0])
+x_init = np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0])
 # x_init = np.zeros(6)
 problem = crocoddyl.ShootingProblem(x_init, locoModel, mT)
 solver = crocoddyl.SolverBoxFDDP(problem)
@@ -95,9 +97,10 @@ solver = crocoddyl.SolverBoxFDDP(problem)
 log = crocoddyl.CallbackLogger()
 solver.setCallbacks([log, crocoddyl.CallbackVerbose()])
 t0 = time.time()
-u_init = [m.quasiStatic(d, x_init) for m,d in zip(problem.runningModels, problem.runningDatas)]
-# solver.solve([x_init]*(problem.T + 1), u_init, 100) # x init, u init, max iteration
-solver.solve()  # x init, u init, max iteration
+u_init = np.array([931.95, 0.0, 0.0, 0.001])
+# u_init = [m.quasiStatic(d, x_init) for m,d in zip(problem.runningModels, problem.runningDatas)]
+solver.solve([x_init]*(problem.T + 1), [u_init]*problem.T, 100) # x init, u init, max iteration
+# solver.solve()  # x init, u init, max iteration
 
 print 'Time of iteration consumed', time.time()-t0
 
