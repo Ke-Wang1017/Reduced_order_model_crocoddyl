@@ -137,6 +137,6 @@ def plotComMotion(xs, us):
 
 plotComMotion(solver.xs, solver.us)
 
-solver.
+# solver.
 import trajectory_publisher
 
