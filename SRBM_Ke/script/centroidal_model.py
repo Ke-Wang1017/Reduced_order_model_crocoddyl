@@ -16,7 +16,6 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
         self.u_ub = np.array([2.0*self.m*self.g, 0.8, 0.12, 0.05])
 
 
-
     def calc(self, data, x, u):
         if u is None:
             u = self.uNone
