@@ -79,7 +79,6 @@ m3 = createPhaseModel(np.array([0.1, 0.0, 0.00]))
 m4 = createPhaseModel(np.array([0.2, 0.08, 0.00]))
 m5 = createPhaseModel(np.array([0.2, 0.0, 0.00]))
 mT = createTerminalModel(np.array([0.2, 0.0, 0.00]))
-# data = model.createData() # seems not needed for this
 
 num_nodes_single_support = 50
 num_nodes_double_support = 20

@@ -4,8 +4,8 @@ import crocoddyl
 import numpy as np
 
 # Choose here whiche model : simple or non linear
-from crocoddyl_class.ActionModel import *
-#from crocoddyl_class.ActionModel_nl import *
+# from ActionModel import *
+from ActionModel_nl import *
 
 class GaitProblem:
 

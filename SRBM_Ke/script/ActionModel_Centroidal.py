@@ -8,7 +8,6 @@ import utils
 class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstract):
 
     def __init__(self, costs, m, mu = 0.8,log = True ):
-
         crocoddyl.DifferentialActionModelAbstract.__init__(self, crocoddyl.StateVector(12), 12) # nu=12, 4 legs each has 3 force
         #:param state: state description,
         #:param nu: dimension of control vector,
@@ -58,7 +57,7 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
         # S matrix 
         # Represents the feet that are in contact with the ground such as : 
         # S = [1 0 0 1] --> FL(Front Left) in contact, FR not , HL not , HR in contact
-        self.S = np.ones(4)
+        # self.S = np.ones(4)
 
         # List of the feet in contact with the ground used to compute B
         # if S = [1 0 0 1] ; L_feet = [1 1 1 0 0 0 0 0 0 1 1 1]
@@ -113,7 +112,7 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
         # Get skew-symetric matrix for each foothold
         data.lever_arms = self.footholds - np.array(x[0:3]).transpose()
         for i in range(4):
-            if(data.S[i] != 0 ) :
+            if data.S[i] != 0:
                 data.B[-3:, (i*3):((i+1)*3)] = self.dt * np.dot(self.I_inv, utils.getSkew(data.lever_arms[:, i]))
             else :
                 # Feet not in contact with the ground
@@ -125,7 +124,7 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
 
         # data.cost = .5* (sum((data.r)**2).item()) +  self.frictionWeight*self.dataCost.a_value
 
-        data.xout = np.dot(self.A,x) + np.dot(self.B,u) + self.g
+        data.xout = np.dot(data.A,x) + np.dot(data.B,u) + self.g
 
         # compute the cost residual
         self.costs.calc(data.costs, x, u)
@@ -147,11 +146,14 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
         #:param x: time-discrete state vector
         #:param u: time-discrete control input
 
-        self.update_derivative_B(u)
+        for i in range(4):
+            if data.S[i] != 0:
+                data.derivative_B[-3:, 0] = - np.dot(self.I_inv ,  self.dt * np.cross( [1,0,0] , [u[3*i] , u[3*i+1] , u[3*i+2] ] ) ) # \x
+                data.derivative_B[-3:, 1] = - np.dot(self.I_inv ,  self.dt * np.cross( [0,1,0] , [u[3*i] , u[3*i+1] , u[3*i+2] ] ) ) # \y
+                data.derivative_B[-3:, 2] = - np.dot(self.I_inv ,  self.dt *  np.cross( [0,0,1] , [u[3*i] , u[3*i+1] , u[3*i+2] ] ) )# \z
 
-
-        data.Fx[:,:] = self.A[:,:] + self.derivative_B[:,:]   # here derivative B is null
-        data.Fu[:,:] = self.B[:,:]
+        data.Fx[:,:] = data.A[:,:] + data.derivative_B[:,:]   # here derivative B is null
+        data.Fu[:,:] = data.B[:,:]
         self.costs.calcDiff(data.costs, x, u)
 
     def createModel(self, data):
@@ -165,19 +167,21 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
          # Create matrix B
         data.B = np.zeros((12, 12))
 
-        # Create matrix g
-        self.g[8] = -9.81 * self.dt
-
         # Matrice Fa of the cone class, repeated 4 times (4 feet)
         data.Fa = np.zeros((20,12))
         # Create Fa matrix
         for k in range(4) : 
             data.Fa[5*k:5*k+5 , 3*k:3*k+3] = self.cone.A
 
+        data.S = np.ones(4)
         # Levers Arms used in B
-        self.lever_arms = np.zeros((3,4)) # 4 contact points
+        data.lever_arms = np.zeros((3,4)) # 4 contact points
+        data.derivative_B = np.zeros((12,12))
 
-    def updateModel(self,l_feet,xref,S = np.ones(4)):
+        # Create matrix g
+        self.g[8] = -9.81 * self.dt
+
+    def updateModel(self,l_feet,xref,data,S = np.ones(4)):
         ''' Update the dynamic model 
         Args :
         l_feet (x Array 3x4) : position of the feet 
@@ -187,7 +191,7 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
         '''
 
         self.xref = xref
-        self.S = S
+        data.S = S
 
         # Footholds position in the local frame
         self.footholds[0:2, :] = l_feet[0:2, :]
@@ -196,23 +200,15 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
         # Use of the matrix S which represents feet on the ground
         
         for i in range(len(self.S)) : 
-            self.L_feet[[3*i,3*i+1,3*i+2]] = self.S[i] 
+            self.L_feet[[3*i,3*i+1,3*i+2]] = data.S[i]
         
-        self.B[np.tile([6, 7, 8], 4), np.arange(0, 12, 1)] = (self.dt / self.mass) * self.L_feet
+        data.B[np.tile([6, 7, 8], 4), np.arange(0, 12, 1)] = (self.dt / self.mass) * self.L_feet
 
-        # Get inverse of the inertia matrix 
+        # Get inverse of the inertia matrix, this is also a simplification as it only
+        # considers rotation of yaw
         c, s = np.cos(self.xref[5]), np.sin(self.xref[5])
         R = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1.0]])
         self.I_inv = np.linalg.inv(np.dot(R, self.gI))
-
-        # Get skew-symetric matrix for each foothold
-        #self.lever_arms = self.footholds - np.matrix(self.xref[0:3]).transpose()
-        #for i in range(4): 
-        #    if(self.S[i] != 0 ) : 
-        #        self.B[-3:, (i*3):((i+1)*3)] = self.dt * np.dot(self.I_inv, utils.getSkew(self.lever_arms[:, i]))
-        #    else : 
-        #        # Feet not in contact with the ground 
-        #        self.B[-3:, (i*3):((i+1)*3)] = np.zeros((3,3))
 
         self.log_cost_friction = []
         self.log_cost_state = []
@@ -224,22 +220,9 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
 
         self.activation.calc(self.dataCost , np.dot(self.Fa,u))
         self.activation.calcDiff(self.dataCost , np.dot(self.Fa,u))
-        self.Lu_f = self.Fa.transpose() @ self.dataCost.Ar
-        self.Luu_f = np.dot(self.Fa.transpose() , self.dataCost.Arr) @ self.Fa
+        self.Lu_f = np.matmul(self.Fa.transpose(), self.dataCost.Ar)
+        self.Luu_f = np.matmul(np.dot(self.Fa.transpose() , self.dataCost.Arr) , self.Fa)
 
-    # def update_B(self,x) :
-    #
-    #
-    #
-    #     return 0
-
-    def update_derivative_B(self,u):
-        self.derivative_B = np.zeros((12,12))
-        for i in range(4): 
-            if(self.S[i] != 0 ) : 
-                self.derivative_B[-3:, 0] = - np.dot(self.I_inv ,  self.dt * np.cross( [1,0,0] , [u[3*i] , u[3*i+1] , u[3*i+2] ] ) ) # \x
-                self.derivative_B[-3:, 1] = - np.dot(self.I_inv ,  self.dt * np.cross( [0,1,0] , [u[3*i] , u[3*i+1] , u[3*i+2] ] ) ) # \y
-                self.derivative_B[-3:, 2] = - np.dot(self.I_inv ,  self.dt *  np.cross( [0,0,1] , [u[3*i] , u[3*i+1] , u[3*i+2] ] ) )# \z
 
     def createData(self):
         return DifferentialActionDataCentroidal(self)

@@ -56,11 +56,15 @@ class DifferentialActionDataVariableHeightPendulum(crocoddyl.DifferentialActionD
         self.costs.shareMemory(self)
 
 
-def createPhaseModel(cop, xref=np.array([0.0, 0.0, 0.86, 0.1, 0.0, 0.0]), Wx=np.array([0., 0., 10., 10., 10., 10.]), Wu=np.array([0., 50., 50., 1.]), wxreg=1, wureg=5, wxbox=1, dt=2e-2):
+def createPhaseModel(cop, xref=np.array([0.0, 0.0, 0.86, 0.1, 0.0, 0.0]), nsurf=np.array([0.,0.,1.]).T, mu=0.7, Wx=np.array([0., 0., 10., 10., 10., 10.]), Wu=np.array([0., 50., 50., 1.]),
+                     wxreg=1, wureg=5, wxbox=1, dt=2e-2):
     state = crocoddyl.StateVector(6)
     runningCosts = crocoddyl.CostModelSum(state, 4)
     uRef = np.hstack([np.zeros(1), cop])
     xRef = xref
+    nSurf = nsurf
+    Mu = mu
+    cone = crocoddyl.FrictionCone(nSurf, Mu, 1, False)
     ub = np.hstack([cop, np.zeros(3)]) + np.array([0.3, 0.055, 0.95, 7., 7., 3])
     lb = np.hstack([cop, np.zeros(3)]) + np.array([-0.3, -0.055, 0.75, -7., -7., -3])
     runningCosts.addCost("comBox", crocoddyl.CostModelState(state, crocoddyl.ActivationModelQuadraticBarrier(crocoddyl.ActivationBounds(lb, ub)), xRef, 4), wxbox)

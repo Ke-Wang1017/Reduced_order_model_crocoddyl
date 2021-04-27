@@ -214,8 +214,8 @@ class ActionModel(crocoddyl.ActionModelAbstract):
 
         self.activation.calc(self.dataCost , np.dot(self.Fa,u))
         self.activation.calcDiff(self.dataCost , np.dot(self.Fa,u))
-        self.Lu_f = self.Fa.transpose() @ self.dataCost.Ar
-        self.Luu_f = np.dot(self.Fa.transpose() , self.dataCost.Arr) @ self.Fa
+        self.Lu_f = np.matmul(self.Fa.transpose(), self.dataCost.Ar)
+        self.Luu_f = np.matmul(np.dot(self.Fa.transpose() , self.dataCost.Arr) , self.Fa)
 
 
 

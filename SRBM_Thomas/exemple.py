@@ -2,7 +2,13 @@ import crocoddyl
 import numpy as np
 import time
 import matplotlib.pylab as plt
-from crocoddyl_class.GaitProblem import *
+import sys
+import os
+
+path = os.path.abspath(os.getcwd())
+sys.path.append(path + '/crocoddyl_class')
+from GaitProblem import *
+
 
 
 ####################

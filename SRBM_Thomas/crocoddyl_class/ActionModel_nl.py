@@ -70,7 +70,7 @@ class ActionModel(crocoddyl.ActionModelAbstract):
         self.L_feet = np.zeros(12)
 
         #Normal vector for friction cone
-        self.nsurf = np.matrix([0., 0., 1.]).T
+        self.nsurf = np.array([0., 0., 1.]).T
 
         # Cone croccodyl class
         self.cone = crocoddyl.FrictionCone(self.nsurf, self.mu, 4, False)
@@ -218,8 +218,8 @@ class ActionModel(crocoddyl.ActionModelAbstract):
 
         self.activation.calc(self.dataCost , np.dot(self.Fa,u))
         self.activation.calcDiff(self.dataCost , np.dot(self.Fa,u))
-        self.Lu_f = self.Fa.transpose() @ self.dataCost.Ar
-        self.Luu_f = np.dot(self.Fa.transpose() , self.dataCost.Arr) @ self.Fa
+        self.Lu_f = np.matmul(self.Fa.transpose() , self.dataCost.Ar)
+        self.Luu_f = np.matmul(np.dot(self.Fa.transpose() , self.dataCost.Arr) , self.Fa)
 
     def update_B(self,x) :
 
