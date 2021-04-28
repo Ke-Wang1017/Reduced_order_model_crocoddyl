@@ -29,12 +29,8 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
 
 
     def calc(self, data, x, u):
-        if u is None:
-            u = self.uNone
         # Levers Arms used in B, can I put lever-arms into data???
-        data.lever_arms = np.zeros((3,4)) # 4 contact points
-        data.lever_arms = self.footholds - np.array(x[:3]).transpose() # broadcast x
-        data.B = np.zeros((6,12))
+        data.L = self.footholds - np.array(x[:3]).transpose() # broadcast x
         H = utils.euler_matrix(x[3],x[4],x[5])
         R = H[:3,:3]
         self.I_inv = np.linalg.inv(np.dot(R, self.gI))
@@ -42,7 +38,7 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
             # if feet in touch with ground
             if self.S[i] != 0:
                 data.B[:3, (i*3):((i+1)*3)] = np.identity(3)/self.m #
-                data.B[-3:, (i*3):((i+1)*3)] = np.dot(self.I_inv, utils.getSkew(data.lever_arms[:, i])) # another term needs added
+                data.B[-3:, (i*3):((i+1)*3)] = np.dot(self.I_inv, utils.getSkew(data.L[:, i])) # another term needs added
         # Compute friction cone
         # self.costFriction(u)
         data.xout = np.dot(data.B,u) + self.g
@@ -54,7 +50,7 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
     def calcDiff(self, data, x, u):
         data.derivative_B = np.zeros((6, 12))
         for i in range(4):
-            if data.S[i] != 0:
+            if self.S[i] != 0:
                 data.derivative_B[-3:, 0] = - np.dot(self.I_inv, np.cross([1, 0, 0], [u[3 * i], u[3 * i + 1],
                                                                                                 u[3 * i + 2]]))  # \x
                 data.derivative_B[-3:, 1] = - np.dot(self.I_inv, np.cross([0, 1, 0], [u[3 * i], u[3 * i + 1],
@@ -66,7 +62,10 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
         self.costs.calcDiff(data.costs, x, u)
 
     def createData(self):
-        return DifferentialActionDataCentroidal(self)
+        data = DifferentialActionDataCentroidal(self)
+        data.B = np.zeros((6, 12))
+        data.L = np.zeros((3, 4)) # 4 contact points
+        return data
 
     def updateModel(self, foothold, nsurf, contact_selection, Ig):
         self.footholds = foothold
