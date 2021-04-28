@@ -5,12 +5,13 @@ import math
 import utils
 
 class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstract):
-    def __init__(self, costs, m, Ig):
+    def __init__(self, costs, m):
         crocoddyl.DifferentialActionModelAbstract.__init__(self, crocoddyl.StateVector(12), 12) # nu = 12
         self.uNone = np.zeros(self.nu)
 
         self.m = m
-        self.Ig = Ig
+        self.Ig = np.diag([0.00578574, 0.01938108, 0.02476124]) # can be get from URDF
+
         self.g = np.zeros(6)
         self.g[2] = -9.81
         self.costs = costs
@@ -67,10 +68,11 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
     def createData(self):
         return DifferentialActionDataCentroidal(self)
 
-    def updateModel(self, foothold, nsurf, contact_selection):
+    def updateModel(self, foothold, nsurf, contact_selection, Ig):
         self.footholds = foothold
         self.nsurf = nsurf
         self.S = contact_selection
+        self.Ig = Ig
 
 class DifferentialActionDataCentroidal(crocoddyl.DifferentialActionDataAbstract):
     def __init__(self, model):
