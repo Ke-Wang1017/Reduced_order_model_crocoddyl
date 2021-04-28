@@ -2,51 +2,75 @@ import crocoddyl
 import numpy as np
 import time
 import math
+import utils
 
 class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstract):
     def __init__(self, costs, m, Ig):
-        crocoddyl.DifferentialActionModelAbstract.__init__(self, crocoddyl.StateVector(6), 4) # nu = 1
+        crocoddyl.DifferentialActionModelAbstract.__init__(self, crocoddyl.StateVector(12), 12) # nu = 12
         self.uNone = np.zeros(self.nu)
 
         self.m = m
         self.Ig = Ig
-        self.g = 9.81
+        self.g = np.zeros(6)
+        self.g[2] = -9.81
         self.costs = costs
-        self.u_lb = np.array([100., -0.8, -0.12, 0.0])
-        self.u_ub = np.array([2.0*self.m*self.g, 0.8, 0.12, 0.05])
+        self.footholds = np.array(
+            [[0.19, 0.19, -0.19, -0.19],
+             [0.15005, -0.15005, 0.15005, -0.15005],
+             [0.0, 0.0, 0.0, 0.0]])
+        #Normal vector for friction cone
+        self.nsurf = np.array([0., 0., 1.]).T # flat ground
+        self.S = np.ones(4)
+        self.I_inv = np.identity(3)
+
+        # self.u_lb = np.array([100., -0.8, -0.12, 0.0])
+        # self.u_ub = np.array([2.0*self.m*self.g, 0.8, 0.12, 0.05])
 
 
     def calc(self, data, x, u):
         if u is None:
             u = self.uNone
-        c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x # how do you know cdot is the diff of c? From the Euler integration model
-        f_z, u_x, u_y, u_z = u.item(0), u.item(1), u.item(2), u.item(3)
-
-        cdotdot_x = f_z * (c_x-u_x) / ((c_z-u_z) * self.m)
-        cdotdot_y = f_z * (c_y-u_y) / ((c_z-u_z) * self.m)
-        cdotdot_z = f_z/self.m - self.g
-        data.xout = np.array([cdotdot_x, cdotdot_y, cdotdot_z]).T
+        # Levers Arms used in B, can I put lever-arms into data???
+        data.lever_arms = np.zeros((3,4)) # 4 contact points
+        data.lever_arms = self.footholds - np.array(x[:3]).transpose() # broadcast x
+        data.B = np.zeros((6,12))
+        H = utils.euler_matrix(x[3],x[4],x[5])
+        R = H[:3,:3]
+        self.I_inv = np.linalg.inv(np.dot(R, self.gI))
+        for i in range(4):
+            # if feet in touch with ground
+            if self.S[i] != 0:
+                data.B[:3, (i*3):((i+1)*3)] = np.identity(3)/self.m #
+                data.B[-3:, (i*3):((i+1)*3)] = np.dot(self.I_inv, utils.getSkew(data.lever_arms[:, i])) # another term needs added
+        # Compute friction cone
+        # self.costFriction(u)
+        data.xout = np.dot(data.B,u) + self.g
 
         # compute the cost residual
         self.costs.calc(data.costs, x, u)
         data.cost = data.costs.cost
 
     def calcDiff(self, data, x, u):
-        c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x
-        f_z, u_x, u_y, u_z = u.item(0), u.item(1), u.item(2), u.item(3)
-
-        data.Fx[:, :] = np.array([[f_z/((c_z-u_z)*self.m), 0.0, -f_z*(c_x-u_x)/((c_z-u_z)**2*self.m), 0.0, 0.0, 0.0],
-                                  [0.0, f_z/((c_z-u_z)*self.m), -f_z*(c_y-u_y)/((c_z-u_z)**2*self.m), 0.0, 0.0, 0.0],
-                                  [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
-
-        data.Fu[:, :] = np.array([[(c_x-u_x)/(self.m*(c_z-u_z)), -f_z/((c_z-u_z)*self.m), 0., self.m*f_z*(c_x-u_x)/((c_z-u_z)*self.m)**2],
-                                 [(c_y-u_y)/(self.m*(c_z-u_z)), 0., -f_z /((c_z - u_z) * self.m), self.m * f_z * (c_y - u_y) / ((c_z - u_z) * self.m) ** 2],
-                                 [1.0/self.m, 0., 0., 0.]]) # needs to be modified
+        data.derivative_B = np.zeros((6, 12))
+        for i in range(4):
+            if data.S[i] != 0:
+                data.derivative_B[-3:, 0] = - np.dot(self.I_inv, np.cross([1, 0, 0], [u[3 * i], u[3 * i + 1],
+                                                                                                u[3 * i + 2]]))  # \x
+                data.derivative_B[-3:, 1] = - np.dot(self.I_inv, np.cross([0, 1, 0], [u[3 * i], u[3 * i + 1],
+                                                                                                u[3 * i + 2]]))  # \y
+                data.derivative_B[-3:, 2] = - np.dot(self.I_inv, np.cross([0, 0, 1], [u[3 * i], u[3 * i + 1],
+                                                                                                u[3 * i + 2]]))  # \z
+        data.Fx[:,:] = data.derivative_B[:,:]
+        data.Fu[:,:] = data.B[:,:]
         self.costs.calcDiff(data.costs, x, u)
 
     def createData(self):
         return DifferentialActionDataCentroidal(self)
 
+    def updateModel(self, foothold, nsurf, contact_selection):
+        self.footholds = foothold
+        self.nsurf = nsurf
+        self.S = contact_selection
 
 class DifferentialActionDataCentroidal(crocoddyl.DifferentialActionDataAbstract):
     def __init__(self, model):
@@ -56,17 +80,23 @@ class DifferentialActionDataCentroidal(crocoddyl.DifferentialActionDataAbstract)
         self.costs.shareMemory(self)
 
 
-def createPhaseModel(cop, xref=np.array([0.0, 0.0, 0.86, 0.1, 0.0, 0.0]), Wx=np.array([0., 0., 10., 10., 10., 10.]), Wu=np.array([0., 50., 50., 1.]), wxreg=1, wureg=5, wxbox=1, dt=2e-2):
-    state = crocoddyl.StateVector(6)
-    runningCosts = crocoddyl.CostModelSum(state, 4)
-    uRef = np.hstack([np.zeros(1), cop])
+def createPhaseModel(foothold, nsurf, mu, xref=np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0]),
+                     Wx=np.ones(12), Wu=np.ones(12), wxreg=1, wureg=5, wufriction=5, wxbox=1, dt=2e-2):
+    state = crocoddyl.StateVector(12)
+    runningCosts = crocoddyl.CostModelSum(state, 12)
+    Foothold = foothold
+    Nsurf = nsurf
+    Mu = mu
     xRef = xref
-    ub = np.hstack([cop, np.zeros(3)]) + np.array([0.3, 0.055, 0.95, 7., 7., 3])
-    lb = np.hstack([cop, np.zeros(3)]) + np.array([-0.3, -0.055, 0.75, -7., -7., -3])
-    runningCosts.addCost("comBox", crocoddyl.CostModelState(state, crocoddyl.ActivationModelQuadraticBarrier(crocoddyl.ActivationBounds(lb, ub)), xRef, 4), wxbox)
-    runningCosts.addCost("comReg", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(Wx), xRef, 4), wxreg)
-    runningCosts.addCost("uTrack", crocoddyl.CostModelControl(state, crocoddyl.ActivationModelWeightedQuad(Wu), uRef), wureg) ## ||u||^2
-    runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, 4), wureg*10) ## ||u||^2
+    cone = crocoddyl.FrictionCone(Nsurf, Mu, 4, False)
+    x_ub = np.hstack([Foothold, np.zeros(3)]) + np.array([0.3, 0.055, 0.95, 7., 7., 3]) # can be modified
+    x_lb = np.hstack([Foothold, np.zeros(3)]) + np.array([-0.3, -0.055, 0.75, -7., -7., -3])
+    u_lb = np.tile(cone.lb, 4)  # force based on friction cone
+    u_ub = np.tile(cone.ub, 4)
+    runningCosts.addCost("comBox", crocoddyl.CostModelState(state, crocoddyl.ActivationModelQuadraticBarrier(crocoddyl.ActivationBounds(x_lb, x_ub)), xRef, 4), wxbox)
+    runningCosts.addCost("comReg", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(Wx), xRef, 12), wxreg)
+    runningCosts.addCost("frictionCone", crocoddyl.CostModelControl(state, crocoddyl.ActivationModelQuadraticBarrier((crocoddyl.ActivationBounds(u_lb, u_ub)))), wufriction)
+    runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, 12), wureg*10) ## ||u||^2
     model = DifferentialActionModelCentroidal(runningCosts, m=95.0)
     return crocoddyl.IntegratedActionModelEuler(model, dt)
 
