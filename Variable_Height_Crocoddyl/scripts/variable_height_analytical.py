@@ -1,7 +1,8 @@
-import crocoddyl
 import numpy as np
 import time
-import math
+
+import crocoddyl
+
 
 class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialActionModelAbstract):
     def __init__(self, costs):
@@ -13,7 +14,6 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
         self.costs = costs
         self.u_lb = np.array([100., -0.8, -0.12, 0.0])
         self.u_ub = np.array([2.0*self.m*self.g, 0.8, 0.12, 0.05])
-
 
 
     def calc(self, data, x, u):
@@ -56,8 +56,8 @@ class DifferentialActionDataVariableHeightPendulum(crocoddyl.DifferentialActionD
         self.costs.shareMemory(self)
 
 
-def createPhaseModel(cop, xref=np.array([0.0, 0.0, 0.86, 0.1, 0.0, 0.0]), nsurf=np.array([0.,0.,1.]).T, mu=0.7, Wx=np.array([0., 0., 10., 10., 10., 10.]), Wu=np.array([0., 50., 50., 1.]),
-                     wxreg=1, wureg=5, wxbox=1, dt=2e-2):
+def createPhaseModel(cop, xref=np.array([0.0, 0.0, 0.86, 0.15, 0.0, 0.0]), nsurf=np.array([0.,0.,1.]).T, mu=0.7, Wx=np.array([0., 0., 10., 10., 10., 10.]), Wu=np.array([0., 50., 50., 1.]),
+                     wxreg=1, wureg=5, wutrack=50, wxbox=1, dt=2e-2):
     state = crocoddyl.StateVector(6)
     runningCosts = crocoddyl.CostModelSum(state, 4)
     uRef = np.hstack([np.zeros(1), cop])
@@ -70,44 +70,66 @@ def createPhaseModel(cop, xref=np.array([0.0, 0.0, 0.86, 0.1, 0.0, 0.0]), nsurf=
     runningCosts.addCost("comBox", crocoddyl.CostModelState(state, crocoddyl.ActivationModelQuadraticBarrier(crocoddyl.ActivationBounds(lb, ub)), xRef, 4), wxbox)
     runningCosts.addCost("comReg", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(Wx), xRef, 4), wxreg)
     runningCosts.addCost("uTrack", crocoddyl.CostModelControl(state, crocoddyl.ActivationModelWeightedQuad(Wu), uRef), wureg) ## ||u||^2
-    runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, 4), wureg*10) ## ||u||^2
+    runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, 4), wutrack) ## ||u||^2
     model = DifferentialActionModelVariableHeightPendulum(runningCosts)
     return crocoddyl.IntegratedActionModelEuler(model, dt)
 
 def createTerminalModel(cop):
-    return createPhaseModel(cop, xref=np.array([0.0, 0.0, 0.86, 0.02, 0.0, 0.0]), Wx=np.array([0., 0., 100., 30., 30., 150.]), wxreg=1e6, dt=0.)
+    return createPhaseModel(cop, xref=np.array([0.0, 0.0, 0.86+0.2, 0.0, 0.0, 0.0]), Wx=np.array([0., 10., 100., 10., 10., 150.]), wxreg=1e6, dt=0.)
 
-m1 = createPhaseModel(np.array([0.0, 0.0, 0.00]))
-m2 = createPhaseModel(np.array([0.0, -0.08, 0.00]))
-m3 = createPhaseModel(np.array([0.1, 0.0, 0.00]))
-m4 = createPhaseModel(np.array([0.2, 0.08, 0.00]))
-m5 = createPhaseModel(np.array([0.2, 0.0, 0.00]))
-mT = createTerminalModel(np.array([0.2, 0.0, 0.00]))
+
+foot_holds = np.array([[0.0, 0.0, 0.0],[0.0, -0.08, 0.05],[0.1, 0.0, 0.1],[0.2, 0.08, 0.15],[0.2, 0.0, 0.2]])
+phase = np.array([0, 1, 0, -1, 0]) # 0: double, 1: left, -1: right
 
 num_nodes_single_support = 50
-num_nodes_double_support = 20
-locoModel = [m1]*num_nodes_double_support
-locoModel += [m2]*num_nodes_single_support
-locoModel += [m3]*num_nodes_double_support
-locoModel += [m4]*num_nodes_single_support
-locoModel += [m5]*num_nodes_double_support
+num_nodes_double_support = 25
 
+locoModel = [createPhaseModel(foot_holds[0,:])]
+cop = np.zeros(3)
+for i in range(len(phase)):
+    if phase[i] == 0:
+        if i==0:
+            for j in range(num_nodes_double_support):
+                tmp_cop = foot_holds[0,:] + (foot_holds[1,:]-foot_holds[0,:])*(j+1)/num_nodes_double_support
+                cop = np.vstack((cop, tmp_cop))
+                tmp_model = createPhaseModel(tmp_cop, xref=np.array([0.0, 0.0, 0.86+tmp_cop[2], 0.1, 0.0, 0.0]))
+                locoModel += [tmp_model]
+        elif i==len(phase)-1:
+            for j in range(num_nodes_double_support):
+                tmp_cop = foot_holds[i-1,:] + (foot_holds[i,:]-foot_holds[i-1,:])*(j+1)/num_nodes_double_support
+                cop = np.vstack((cop, tmp_cop))
+                tmp_model = createPhaseModel(tmp_cop, xref=np.array([0.0, 0.0, 0.86+tmp_cop[2], 0.1, 0.0, 0.0]))
+                locoModel += [tmp_model]
+        else:
+            for j in range(num_nodes_double_support):
+                tmp_cop = foot_holds[i-1,:] + (foot_holds[i+1,:]-foot_holds[i-1,:])*(j+1)/num_nodes_double_support
+                cop = np.vstack((cop, tmp_cop))
+                tmp_model = createPhaseModel(tmp_cop, xref=np.array([0.0, 0.0, 0.86+tmp_cop[2], 0.1, 0.0, 0.0]))
+                locoModel += [tmp_model]
+
+    if phase[i] == 1 or phase[i] == -1:
+        locoModel += [createPhaseModel(foot_holds[i,:], xref=np.array([0.0, 0.0, 0.86+tmp_cop[2], 0.1, 0.0, 0.0]))]*num_nodes_single_support
+        for j in range(num_nodes_single_support):
+            cop = np.vstack((cop, foot_holds[i,:]))
+mT = createTerminalModel(np.array([0.2, 0.0, 0.00]))
+
+# import matplotlib.pyplot as plt
+# plt.plot(cop[:,1])
+# plt.show()
+
+u_init = np.array([931.95, 0.0, 0.0, 0.001])
 x_init = np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0])
-# x_init = np.zeros(6)
 problem = crocoddyl.ShootingProblem(x_init, locoModel, mT)
 solver = crocoddyl.SolverBoxFDDP(problem)
-# solver = crocoddyl.SolverFDDP(problem)
 log = crocoddyl.CallbackLogger()
 solver.setCallbacks([log, crocoddyl.CallbackVerbose()])
-u_init = np.array([931.95, 0.0, 0.0, 0.001])
 t0 = time.time()
-# u_init = [m.quasiStatic(d, x_init) for m,d in zip(problem.runningModels, problem.runningDatas)]
-solver.solve([x_init]*(problem.T + 1), [u_init]*problem.T, 100) # x init, u init, max iteration
+solver.solve([x_init]*(problem.T + 1), [u_init]*problem.T, 10) # x init, u init, max iteration
 # solver.solve()  # x init, u init, max iteration
 
 print('Time of iteration consumed', time.time()-t0)
 
-crocoddyl.plotOCSolution(log.xs[:], log.us)
+# crocoddyl.plotOCSolution(log.xs[:], log.us)
 # crocoddyl.plotConvergence(log.costs, log.u_regs, log.x_regs, log.grads, log.stops, log.steps)
 
 
@@ -140,6 +162,8 @@ def plotComMotion(xs, us):
 
 plotComMotion(solver.xs, solver.us)
 
+np.save('../foot_holds.npy', np.concatenate((foot_holds, np.array([phase]).T), axis=1))
+np.save('../com_traj.npy', solver.xs)
+np.save('../control_traj.npy', solver.us)
 # solver.
-import trajectory_publisher
 
