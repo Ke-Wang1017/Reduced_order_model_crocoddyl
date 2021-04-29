@@ -22,7 +22,6 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
         #Normal vector for friction cone
         self.nsurf = np.array([0., 0., 1.]).T # flat ground
         self.S = np.ones(4)
-        self.I_inv = np.identity(3)
 
         # self.u_lb = np.array([100., -0.8, -0.12, 0.0])
         # self.u_ub = np.array([2.0*self.m*self.g, 0.8, 0.12, 0.05])
@@ -33,12 +32,12 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
         data.L = self.footholds - np.array(x[:3]).transpose() # broadcast x
         H = utils.euler_matrix(x[3],x[4],x[5])
         R = H[:3,:3]
-        self.I_inv = np.linalg.inv(np.dot(R, self.gI))
+        data.I_inv = np.linalg.inv(np.dot(R, self.gI))
         for i in range(4):
             # if feet in touch with ground
             if self.S[i] != 0:
                 data.B[:3, (i*3):((i+1)*3)] = np.identity(3)/self.m #
-                data.B[-3:, (i*3):((i+1)*3)] = np.dot(self.I_inv, utils.getSkew(data.L[:, i])) # another term needs added
+                data.B[-3:, (i*3):((i+1)*3)] = np.dot(data.I_inv, utils.getSkew(data.L[:, i])) # another term needs added
         # Compute friction cone
         # self.costFriction(u)
         data.xout = np.dot(data.B,u) + self.g
@@ -48,14 +47,13 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
         data.cost = data.costs.cost
 
     def calcDiff(self, data, x, u):
-        data.derivative_B = np.zeros((6, 12))
         for i in range(4):
             if self.S[i] != 0:
-                data.derivative_B[-3:, 0] = - np.dot(self.I_inv, np.cross([1, 0, 0], [u[3 * i], u[3 * i + 1],
+                data.derivative_B[-3:, 0] = - np.dot(data.I_inv, np.cross([1, 0, 0], [u[3 * i], u[3 * i + 1],
                                                                                                 u[3 * i + 2]]))  # \x
-                data.derivative_B[-3:, 1] = - np.dot(self.I_inv, np.cross([0, 1, 0], [u[3 * i], u[3 * i + 1],
+                data.derivative_B[-3:, 1] = - np.dot(data.I_inv, np.cross([0, 1, 0], [u[3 * i], u[3 * i + 1],
                                                                                                 u[3 * i + 2]]))  # \y
-                data.derivative_B[-3:, 2] = - np.dot(self.I_inv, np.cross([0, 0, 1], [u[3 * i], u[3 * i + 1],
+                data.derivative_B[-3:, 2] = - np.dot(data.I_inv, np.cross([0, 0, 1], [u[3 * i], u[3 * i + 1],
                                                                                                 u[3 * i + 2]]))  # \z
         data.Fx[:,:] = data.derivative_B[:,:]
         data.Fu[:,:] = data.B[:,:]
@@ -65,6 +63,8 @@ class DifferentialActionModelCentroidal(crocoddyl.DifferentialActionModelAbstrac
         data = DifferentialActionDataCentroidal(self)
         data.B = np.zeros((6, 12))
         data.L = np.zeros((3, 4)) # 4 contact points
+        data.derivative_B = np.zeros((6, 12))
+        data.I_inv = np.identity(3)
         return data
 
     def updateModel(self, foothold, nsurf, contact_selection, Ig):
