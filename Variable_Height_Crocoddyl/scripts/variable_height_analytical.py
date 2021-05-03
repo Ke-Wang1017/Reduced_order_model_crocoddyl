@@ -64,13 +64,13 @@ def createPhaseModel(cop, xref=np.array([0.0, 0.0, 0.86, 0.15, 0.0, 0.0]), nsurf
     xRef = xref
     nSurf = nsurf
     Mu = mu
-    cone = crocoddyl.FrictionCone(nSurf, Mu, 1, False)
+    # cone = crocoddyl.FrictionCone(nSurf, Mu, 1, False)
     ub = np.hstack([cop, np.zeros(3)]) + np.array([0.3, 0.055, 0.95, 7., 7., 3])
     lb = np.hstack([cop, np.zeros(3)]) + np.array([-0.3, -0.055, 0.75, -7., -7., -3])
-    runningCosts.addCost("comBox", crocoddyl.CostModelState(state, crocoddyl.ActivationModelQuadraticBarrier(crocoddyl.ActivationBounds(lb, ub)), xRef, 4), wxbox)
-    runningCosts.addCost("comReg", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(Wx), xRef, 4), wxreg)
+    runningCosts.addCost("comBox", crocoddyl.CostModelResidual(state, crocoddyl.ActivationModelQuadraticBarrier(crocoddyl.ActivationBounds(lb, ub)), crocoddyl.ResidualModelState(state, xRef, 4)), wxbox)
+    runningCosts.addCost("comReg", crocoddyl.CostModelResidual(state, crocoddyl.ActivationModelWeightedQuad(Wx), crocoddyl.ResidualModelState(state, xRef, 4)), wxreg)
     runningCosts.addCost("uTrack", crocoddyl.CostModelControl(state, crocoddyl.ActivationModelWeightedQuad(Wu), uRef), wureg) ## ||u||^2
-    runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, 4), wutrack) ## ||u||^2
+    runningCosts.addCost("uReg", crocoddyl.CostModelResidual(state, crocoddyl.ResidualModelControl(state,4)), wutrack) ## ||u||^2
     model = DifferentialActionModelVariableHeightPendulum(runningCosts)
     return crocoddyl.IntegratedActionModelEuler(model, dt)
 
