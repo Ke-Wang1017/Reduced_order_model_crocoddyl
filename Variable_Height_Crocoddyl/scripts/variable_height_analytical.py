@@ -1,7 +1,8 @@
 import numpy as np
 import time
-
+from scipy.interpolate import interp1d
 import crocoddyl
+import rospy
 
 
 class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialActionModelAbstract):
@@ -75,14 +76,39 @@ def createPhaseModel(cop, xref=np.array([0.0, 0.0, 0.86, 0.15, 0.0, 0.0]), nsurf
     return crocoddyl.IntegratedActionModelEuler(model, dt)
 
 def createTerminalModel(cop):
-    return createPhaseModel(cop, xref=np.array([0.0, 0.0, 0.86+0.2, 0.0, 0.0, 0.0]), Wx=np.array([0., 10., 100., 10., 10., 150.]), wxreg=1e6, dt=0.)
+    return createPhaseModel(cop, xref=np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0]), Wx=np.array([0., 10., 100., 10., 10., 150.]), wxreg=1e6, dt=0.)
 
 
-foot_holds = np.array([[0.0, 0.0, 0.0],[0.0, -0.08, 0.05],[0.1, 0.0, 0.1],[0.2, 0.08, 0.15],[0.2, 0.0, 0.2]])
-phase = np.array([0, 1, 0, -1, 0]) # 0: double, 1: left, -1: right
-
-num_nodes_single_support = 50
-num_nodes_double_support = 25
+foot_holds = np.array([[0.0, 0.0, 0.0], [0.0, -0.08, 0.0], [0.05, 0.0, 0.0], [0.1, 0.08, 0.0], [0.1, 0.0, 0.0]])
+phase = np.array([0, 1, 0, -1, 0])  # 0: double, 1: left, -1: right
+len_steps = phase.shape[0]
+foot_placements = np.zeros((len_steps, 6))
+foot_orientations = np.zeros((len_steps, 6))
+for i in range(len_steps):
+    if phase[i] == 0:
+        foot_placements[i, 0] = foot_holds[i,0]
+        foot_placements[i, 2] = foot_holds[i,2]
+        foot_placements[i, 3] = foot_holds[i,0]
+        foot_placements[i, 5] = foot_holds[i,2]
+        foot_placements[i, 1] = foot_holds[i,1]+0.085
+        foot_placements[i, 4] = foot_holds[i,1]-0.085
+    elif phase[i] == -1:
+        foot_placements[i, 3:] = foot_holds[i,:]
+        foot_placements[i, :3] = foot_placements[i-1,:3]
+    elif phase[i] == 1:
+        foot_placements[i, :3] = foot_holds[i,:]
+        foot_placements[i, 3:] = foot_placements[i-1,3:]
+print('Foot placements are ', foot_placements)
+num_nodes_single_support = 40
+num_nodes_double_support = 20
+dt = 2e-2
+support_indexes = np.array([0, -1, 0, 1, 0])
+support_durations = np.zeros(len_steps)
+for i in range(len_steps):
+    if support_indexes[i] == 0:
+        support_durations[i] = num_nodes_double_support*dt
+    else:
+        support_durations[i] = num_nodes_single_support*dt
 
 locoModel = [createPhaseModel(foot_holds[0,:])]
 cop = np.zeros(3)
@@ -128,7 +154,45 @@ solver.solve([x_init]*(problem.T + 1), [u_init]*problem.T, 10) # x init, u init,
 # solver.solve()  # x init, u init, max iteration
 
 print('Time of iteration consumed', time.time()-t0)
+swing_height = 0.08
+swing_height_offset = 0.01
+com_gain = [30.0, 7.5, 1.0]
 
+com_pos = np.array([x[:3] for x in solver.xs])
+com_vel = np.array([x[3:] for x in solver.xs])
+com_acc = np.vstack((np.diff(com_vel,axis=0),np.zeros(3)))
+total_time = np.cumsum(support_durations)[-1]
+time = np.linspace(0, total_time, com_pos.shape[0])
+# sampling based on the frequency
+f_pos_x = interp1d(time, com_pos[:,0], fill_value=(com_pos[0,0], com_pos[-1,0]), bounds_error=False)
+f_pos_y = interp1d(time, com_pos[:,1], fill_value=(com_pos[0,1], com_pos[-1,1]), bounds_error=False)
+f_pos_z = interp1d(time, com_pos[:,2], fill_value=(com_pos[0,2], com_pos[-1,2]), bounds_error=False)
+f_vel_x = interp1d(time, com_vel[:,0], fill_value=(com_vel[0,0], com_vel[-1,0]), bounds_error=False)
+f_vel_y = interp1d(time, com_vel[:,1], fill_value=(com_vel[0,1], com_vel[-1,1]), bounds_error=False)
+f_vel_z = interp1d(time, com_vel[:,2], fill_value=(com_vel[0,2], com_vel[-1,2]), bounds_error=False)
+f_acc_x = interp1d(time, com_acc[:,0], fill_value=(com_acc[0,0], com_acc[-1,0]), bounds_error=False)
+f_acc_y = interp1d(time, com_acc[:,1], fill_value=(com_acc[0,1], com_acc[-1,1]), bounds_error=False)
+f_acc_z = interp1d(time, com_acc[:,2], fill_value=(com_acc[0,2], com_acc[-1,2]), bounds_error=False)
+freq = 500
+sample_num = int(freq * total_time)
+time_sample = np.linspace(0, total_time, sample_num)
+
+com_traj_sample = np.vstack((time_sample, f_pos_x(time_sample), f_pos_y(time_sample), f_pos_z(time_sample),
+                             f_vel_x(time_sample), f_vel_y(time_sample), f_vel_z(time_sample), f_acc_x(time_sample),
+                             f_acc_y(time_sample), f_acc_z(time_sample)))
+
+import trajectory_publisher
+
+rospy.init_node('listener', anonymous=True)
+
+trajectory_publisher.publish_all(com_traj_sample,
+                                 support_durations,
+                                 support_indexes,
+                                 foot_placements,
+                                 foot_orientations,
+                                 swing_height,
+                                 swing_height_offset,
+                                 com_gain)
 # crocoddyl.plotOCSolution(log.xs[:], log.us)
 # crocoddyl.plotConvergence(log.costs, log.u_regs, log.x_regs, log.grads, log.stops, log.steps)
 
@@ -160,10 +224,12 @@ def plotComMotion(xs, us):
     plt.show()
 
 
-plotComMotion(solver.xs, solver.us)
+# plotComMotion(solver.xs, solver.us)
 
-np.save('../foot_holds.npy', np.concatenate((foot_holds, np.array([phase]).T), axis=1))
-np.save('../com_traj.npy', solver.xs)
-np.save('../control_traj.npy', solver.us)
+# np.save('../foot_holds.npy', np.concatenate((foot_holds, np.array([phase]).T), axis=1))
+# np.save('../com_traj.npy', solver.xs)
+# np.save('../control_traj.npy', solver.us)
+
+
 # solver.
 
