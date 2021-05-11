@@ -75,5 +75,5 @@ def publish_all(com_trajectory, support_durations, support_indexes, foot_placeme
     except rospy.ROSInterruptException: pass
 
 
-if __name__ == "__main__":
-    publish_all()
+# if __name__ == "__main__":
+    # publish_all()
