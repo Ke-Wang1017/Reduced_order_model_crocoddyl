@@ -114,12 +114,15 @@ if __name__ == "__main__":
     foot_orientations = np.zeros((len_steps, 6))
     for i in range(len_steps):
         if phase[i] == 0:
-            foot_placements[i, 0] = foot_holds[i,0]
-            foot_placements[i, 2] = foot_holds[i,2]
-            foot_placements[i, 3] = foot_holds[i,0]
-            foot_placements[i, 5] = foot_holds[i,2]
-            foot_placements[i, 1] = foot_holds[i,1]+0.085
-            foot_placements[i, 4] = foot_holds[i,1]-0.085
+            if i==0:
+                foot_placements[i, 0] = foot_holds[i,0]
+                foot_placements[i, 2] = foot_holds[i,2]
+                foot_placements[i, 3] = foot_holds[i,0]
+                foot_placements[i, 5] = foot_holds[i,2]
+                foot_placements[i, 1] = foot_holds[i,1]+0.085
+                foot_placements[i, 4] = foot_holds[i,1]-0.085
+            else:
+                foot_placements[i,:] = foot_placements[i-1,:]
         elif phase[i] == -1:
             foot_placements[i, 3:] = foot_holds[i,:]
             foot_placements[i, :3] = foot_placements[i-1,:3]
