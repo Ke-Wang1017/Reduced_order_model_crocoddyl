@@ -66,7 +66,10 @@ class DifferentialActionModelVariableHeightPendulum(
               self._m * f_z * (c_y - u_y) / ((c_z - u_z) * self._m)**2],
              [1.0 / self._m, 0., 0., 0.]])  # needs to be modified
 
-        data.contacts.contacts["single"].df_du[:, :] =
+        data.contacts.contacts["single"].df_du[:, :] = np.array([[(c_x - u_x) / (c_z - u_z), (c_y - u_y) / (c_z - u_z), 1.0],
+                                                                 [-f_z / (c_z - u_z), 0.0, 0.0],
+                                                                 [0.0, -f_z / (c_z - u_z), 0.0],
+                                                                 [f_z * (c_x - u_x) / (c_z - u_z)**2, f_z * (c_y - u_y) / (c_z - u_z)**2, 0.0]])
 
         self.costs.calcDiff(data.costs, x, u)
 
@@ -346,9 +349,9 @@ if __name__ == "__main__":
          f_vel_z(time_sample), f_acc_x(time_sample), f_acc_y(time_sample),
          f_acc_z(time_sample)))
 
-    # plotComMotion(solver.xs, solver.us)
-    plt.plot(com_traj_sample[7, :])
-    plt.show()
+    plotComMotion(solver.xs, solver.us)
+    # plt.plot(com_traj_sample[7, :])
+    # plt.show()
 
     import trajectory_publisher
 
