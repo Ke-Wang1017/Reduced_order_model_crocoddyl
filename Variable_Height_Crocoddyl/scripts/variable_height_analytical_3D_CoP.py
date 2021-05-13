@@ -4,33 +4,42 @@ from scipy.interpolate import interp1d
 import crocoddyl
 import rospy
 import matplotlib.pyplot as plt
+import example_robot_data
+import pinocchio
 
 
 class DifferentialActionModelVariableHeightPendulum(
         crocoddyl.DifferentialActionModelAbstract):
-    def __init__(self, costs):
+    def __init__(self, state, costs):
         crocoddyl.DifferentialActionModelAbstract.__init__(
             self, crocoddyl.StateVector(6), 4)  # nu = 1
-        self.uNone = np.zeros(self.nu)
 
-        self.m = 95.0
-        self.g = 9.81
+        self.state_multibody = state
+        self._m = pinocchio.computeTotalMass(self.state_multibody.pinocchio)
+        self._g = abs(self.state_multibody.pinocchio.gravity.linear[2])
+        self.contacts = crocoddyl.ContactModelMultiple(state, 4)
+        self.contacts.addContact(
+            "single",
+            crocoddyl.ContactModel3D(
+                state, crocoddyl.FrameTranslation(0, np.zeros(3)), 4))
         self.costs = costs
         self.u_lb = np.array([100., -0.8, -0.12, 0.0])
-        self.u_ub = np.array([2.0 * self.m * self.g, 0.8, 0.12, 0.05])
+        self.u_ub = np.array([2.0 * self._m * self._g, 0.8, 0.12, 0.05])
 
     def calc(self, data, x, u):
-        if u is None:
-            u = self.uNone
         c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x  # how do you know cdot is the diff of c? From the Euler integration model
         f_z, u_x, u_y, u_z = u.item(0), u.item(1), u.item(2), u.item(3)
 
-        cdotdot_x = f_z * (c_x - u_x) / ((c_z - u_z) * self.m)
-        cdotdot_y = f_z * (c_y - u_y) / ((c_z - u_z) * self.m)
-        cdotdot_z = f_z / self.m - self.g
+        cdotdot_x = f_z * (c_x - u_x) / ((c_z - u_z) * self._m)
+        cdotdot_y = f_z * (c_y - u_y) / ((c_z - u_z) * self._m)
+        cdotdot_z = f_z / self._m - self._g
         data.xout = np.array([cdotdot_x, cdotdot_y, cdotdot_z]).T
 
         # compute the cost residual
+        data.contacts.contacts["single"].f.linear = np.array([
+            f_z * (c_x - u_x) / (c_z - u_z), f_z * (c_y - u_y) / (c_z - u_z),
+            f_z
+        ])
         self.costs.calc(data.costs, x, u)
         data.cost = data.costs.cost
 
@@ -40,22 +49,25 @@ class DifferentialActionModelVariableHeightPendulum(
 
         data.Fx[:, :] = np.array(
             [[
-                f_z / ((c_z - u_z) * self.m), 0.0,
-                -f_z * (c_x - u_x) / ((c_z - u_z)**2 * self.m), 0.0, 0.0, 0.0
+                f_z / ((c_z - u_z) * self._m), 0.0,
+                -f_z * (c_x - u_x) / ((c_z - u_z)**2 * self._m), 0.0, 0.0, 0.0
             ],
              [
-                 0.0, f_z / ((c_z - u_z) * self.m),
-                 -f_z * (c_y - u_y) / ((c_z - u_z)**2 * self.m), 0.0, 0.0, 0.0
+                 0.0, f_z / ((c_z - u_z) * self._m),
+                 -f_z * (c_y - u_y) / ((c_z - u_z)**2 * self._m), 0.0, 0.0, 0.0
              ], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
 
         data.Fu[:, :] = np.array(
-            [[(c_x - u_x) / (self.m * (c_z - u_z)),
-              -f_z / ((c_z - u_z) * self.m), 0.,
-              self.m * f_z * (c_x - u_x) / ((c_z - u_z) * self.m)**2],
-             [(c_y - u_y) / (self.m * (c_z - u_z)), 0.,
-              -f_z / ((c_z - u_z) * self.m),
-              self.m * f_z * (c_y - u_y) / ((c_z - u_z) * self.m)**2],
-             [1.0 / self.m, 0., 0., 0.]])  # needs to be modified
+            [[(c_x - u_x) / (self._m * (c_z - u_z)),
+              -f_z / ((c_z - u_z) * self._m), 0.,
+              self._m * f_z * (c_x - u_x) / ((c_z - u_z) * self._m)**2],
+             [(c_y - u_y) / (self._m * (c_z - u_z)), 0.,
+              -f_z / ((c_z - u_z) * self._m),
+              self._m * f_z * (c_y - u_y) / ((c_z - u_z) * self._m)**2],
+             [1.0 / self._m, 0., 0., 0.]])  # needs to be modified
+
+        data.contacts.contacts["single"].df_du[:, :] =
+
         self.costs.calcDiff(data.costs, x, u)
 
     def createData(self):
@@ -66,9 +78,15 @@ class DifferentialActionDataVariableHeightPendulum(
         crocoddyl.DifferentialActionDataAbstract):
     def __init__(self, model):
         crocoddyl.DifferentialActionDataAbstract.__init__(self, model)
-        shared_data = crocoddyl.DataCollectorAbstract()
-        self.costs = model.costs.createData(shared_data)
+        self.pinocchio = model.state_multibody.pinocchio.createData()
+        self.contacts = model.contacts.createData(self.pinocchio)
+        self.multibody = crocoddyl.DataCollectorMultibodyInContact(
+            self.pinocchio, self.contacts)
+        self.costs = model.costs.createData(self.multibody)
         self.costs.shareMemory(self)
+
+
+robot = example_robot_data.load("talos").model
 
 
 def createPhaseModel(cop,
@@ -83,6 +101,7 @@ def createPhaseModel(cop,
                      wxbox=1,
                      dt=2e-2):
     state = crocoddyl.StateVector(6)
+    multibody_state = crocoddyl.StateMultibody(robot)
     runningCosts = crocoddyl.CostModelSum(state, 4)
     uRef = np.hstack([np.zeros(1), cop])
     xRef = xref
@@ -106,14 +125,25 @@ def createPhaseModel(cop,
             state, crocoddyl.ActivationModelWeightedQuad(Wx),
             crocoddyl.ResidualModelState(state, xRef, 4)), wxreg)
     runningCosts.addCost("uTrack",
-                         crocoddyl.CostModelControl(
+                         crocoddyl.CostModelResidual(
                              state, crocoddyl.ActivationModelWeightedQuad(Wu),
-                             uRef), wureg)  ## ||u||^2
+                             crocoddyl.ResidualModelControl(state, uRef)),
+                         wureg)  ## ||u||^2
     runningCosts.addCost("uReg",
                          crocoddyl.CostModelResidual(
                              state, crocoddyl.ResidualModelControl(state, 4)),
                          wutrack)  ## ||u||^2
-    model = DifferentialActionModelVariableHeightPendulum(runningCosts)
+    cone = crocoddyl.FrictionCone(np.eye(3), Mu)
+    runningCosts.addCost(
+        "frictionPenalization",
+        crocoddyl.CostModelResidual(
+            multibody_state,
+            crocoddyl.ActivationModelQuadraticBarrier(
+                crocoddyl.ActivationBounds(cone.lb, cone.ub)),
+            crocoddyl.ResidualModelContactFrictionCone(multibody_state, 0,
+                                                       cone, 4)), 1e2)
+    model = DifferentialActionModelVariableHeightPendulum(
+        multibody_state, runningCosts)
     return crocoddyl.IntegratedActionModelEuler(model, dt)
 
 
