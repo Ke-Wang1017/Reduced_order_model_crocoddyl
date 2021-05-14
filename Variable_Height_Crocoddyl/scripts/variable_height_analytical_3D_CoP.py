@@ -66,10 +66,14 @@ class DifferentialActionModelVariableHeightPendulum(
               self._m * f_z * (c_y - u_y) / ((c_z - u_z) * self._m)**2],
              [1.0 / self._m, 0., 0., 0.]])  # needs to be modified
 
-        data.contacts.contacts["single"].df_du[:, :] = np.array([[(c_x - u_x) / (c_z - u_z), (c_y - u_y) / (c_z - u_z), 1.0],
-                                                                 [-f_z / (c_z - u_z), 0.0, 0.0],
-                                                                 [0.0, -f_z / (c_z - u_z), 0.0],
-                                                                 [f_z * (c_x - u_x) / (c_z - u_z)**2, f_z * (c_y - u_y) / (c_z - u_z)**2, 0.0]])
+        # data.contacts.contacts["single"].df_dx[:, :] = \
+        #     np.array([[f_z / (c_z - u_z), 0.0, -f_z * (c_x - u_x) / ((c_z - u_z)**2), 0.0, 0.0, 0.0],
+        #               [0.0, f_z / (c_z - u_z), -f_z * (c_y - u_y) / ((c_z - u_z)**2), 0.0, 0.0, 0.0],
+        #               [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+
+        data.contacts.contacts["single"].df_du[:, :] = np.array([[(c_x - u_x) / (c_z - u_z), -f_z / (c_z - u_z), 0.0, f_z * (c_x - u_x) / ((c_z - u_z)**2)],
+                                                                 [(c_y - u_y) / (c_z - u_z), 0.0, -f_z / (c_z - u_z), f_z * (c_y - u_y) / ((c_z - u_z)**2)],
+                                                                 [1.0, 0.0, 0.0, 0.0]])
 
         self.costs.calcDiff(data.costs, x, u)
 
