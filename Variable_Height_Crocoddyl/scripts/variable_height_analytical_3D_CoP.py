@@ -94,7 +94,8 @@ class DifferentialActionDataVariableHeightPendulum(
 def buildSRBMFromRobot(robot_model):
     model = pinocchio.Model()
     placement = pinocchio.SE3.Identity()
-    joint_com = model.addJoint(0, pinocchio.JointModelTranslation(), placement, 'com')
+    joint_com = model.addJoint(0, pinocchio.JointModelTranslation(), placement, 'com') # for inverted pendulum model
+    # joint_com = model.addJoint(0, pinocchio.JointModelFreeFlyer(), placement, 'com') # for single rigid body model
     body_inertia = pinocchio.Inertia.Zero()
     body_inertia.mass = pinocchio.computeTotalMass(robot_model.model)
     data = robot_model.data
