@@ -12,11 +12,10 @@ class DifferentialActionModelVariableHeightPendulum(
         crocoddyl.DifferentialActionModelAbstract):
     def __init__(self, state, costs):
         crocoddyl.DifferentialActionModelAbstract.__init__(
-            self, crocoddyl.StateVector(6), 4)  # nu = 1
+            self, state, 4)  # nu = 1
 
-        self.state_multibody = state
-        self._m = pinocchio.computeTotalMass(self.state_multibody.pinocchio)
-        self._g = abs(self.state_multibody.pinocchio.gravity.linear[2])
+        self._m = pinocchio.computeTotalMass(self.state.pinocchio)
+        self._g = abs(self.state.pinocchio.gravity.linear[2])
         self.contacts = crocoddyl.ContactModelMultiple(state, 4)
         self.contacts.addContact(
             "single",
