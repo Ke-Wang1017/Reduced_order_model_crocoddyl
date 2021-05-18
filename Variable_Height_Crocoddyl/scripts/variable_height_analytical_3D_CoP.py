@@ -65,10 +65,10 @@ class DifferentialActionModelVariableHeightPendulum(
               self._m * f_z * (c_y - u_y) / ((c_z - u_z) * self._m)**2],
              [1.0 / self._m, 0., 0., 0.]])  # needs to be modified
 
-        # data.contacts.contacts["single"].df_dx[:, :] = \
-        #     np.array([[f_z / (c_z - u_z), 0.0, -f_z * (c_x - u_x) / ((c_z - u_z)**2), 0.0, 0.0, 0.0],
-        #               [0.0, f_z / (c_z - u_z), -f_z * (c_y - u_y) / ((c_z - u_z)**2), 0.0, 0.0, 0.0],
-        #               [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+        data.contacts.contacts["single"].df_dx[:, :] = \
+            np.array([[f_z / (c_z - u_z), 0.0, -f_z * (c_x - u_x) / ((c_z - u_z)**2), 0.0, 0.0, 0.0],
+                      [0.0, f_z / (c_z - u_z), -f_z * (c_y - u_y) / ((c_z - u_z)**2), 0.0, 0.0, 0.0],
+                      [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
 
         data.contacts.contacts["single"].df_du[:, :] = np.array([[(c_x - u_x) / (c_z - u_z), -f_z / (c_z - u_z), 0.0, f_z * (c_x - u_x) / ((c_z - u_z)**2)],
                                                                  [(c_y - u_y) / (c_z - u_z), 0.0, -f_z / (c_z - u_z), f_z * (c_y - u_y) / ((c_z - u_z)**2)],
@@ -84,18 +84,33 @@ class DifferentialActionDataVariableHeightPendulum(
         crocoddyl.DifferentialActionDataAbstract):
     def __init__(self, model):
         crocoddyl.DifferentialActionDataAbstract.__init__(self, model)
-        self.pinocchio = model.state_multibody.pinocchio.createData()
+        self.pinocchio = model.state.pinocchio.createData()
         self.contacts = model.contacts.createData(self.pinocchio)
         self.multibody = crocoddyl.DataCollectorMultibodyInContact(
             self.pinocchio, self.contacts)
         self.costs = model.costs.createData(self.multibody)
         self.costs.shareMemory(self)
 
+def buildSRBMFromRobot(robot_model):
+    model = pinocchio.Model()
+    placement = pinocchio.SE3.Identity()
+    joint_com = model.addJoint(0, pinocchio.JointModelTranslation(), placement, 'com')
+    body_inertia = pinocchio.Inertia.Zero()
+    body_inertia.mass = pinocchio.computeTotalMass(robot_model.model)
+    data = robot_model.data
+    q0 = robot_model.q0
+    com = robot_model.com(q0)
+    body_placement = placement
+    body_placement.translation[0] = com[0]
+    body_placement.translation[1] = com[1]
+    body_placement.translation[2] = com[2]
+    model.appendBodyToJoint(joint_com, body_inertia, body_placement)
 
-robot = example_robot_data.load("talos").model
+    return model
 
 
-def createPhaseModel(cop,
+def createPhaseModel(robot_model,
+                     cop,
                      xref=np.array([0.0, 0.0, 0.86, 0.15, 0.0, 0.0]),
                      nsurf=np.array([0., 0., 1.]).T,
                      mu=0.7,
@@ -107,7 +122,8 @@ def createPhaseModel(cop,
                      wxbox=1,
                      dt=2e-2):
     state = crocoddyl.StateVector(6)
-    multibody_state = crocoddyl.StateMultibody(robot)
+    model = buildSRBMFromRobot(robot_model)
+    multibody_state = crocoddyl.StateMultibody(model)
     runningCosts = crocoddyl.CostModelSum(state, 4)
     uRef = np.hstack([np.zeros(1), cop])
     xRef = xref
@@ -153,8 +169,9 @@ def createPhaseModel(cop,
     return crocoddyl.IntegratedActionModelEuler(model, dt)
 
 
-def createTerminalModel(cop):
-    return createPhaseModel(cop,
+def createTerminalModel(robot_model, cop):
+    return createPhaseModel(robot_model,
+                            cop,
                             xref=np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0]),
                             Wx=np.array([0., 10., 100., 10., 10., 150.]),
                             wxreg=1e6,
@@ -194,6 +211,7 @@ if __name__ == "__main__":
                            [0.1, 0.085, 0.0], [0.1, 0.0, 0.0]])
     phase = np.array([0, -1, 0, 1, 0])  # 0: double, 1: left, -1: right
     len_steps = phase.shape[0]
+    robot_model = example_robot_data.load("talos")
     foot_placements = np.zeros((len_steps, 6))
     foot_orientations = np.zeros((len_steps, 6))
     for i in range(len_steps):
@@ -225,7 +243,7 @@ if __name__ == "__main__":
         else:
             support_durations[i] = num_nodes_single_support * dt
 
-    locoModel = [createPhaseModel(foot_holds[0, :])]
+    locoModel = [createPhaseModel(robot_model, foot_holds[0, :])]
     cop = np.zeros(3)
     for i in range(len(phase)):
         if phase[i] == 0:
@@ -235,7 +253,8 @@ if __name__ == "__main__":
                         foot_holds[1, :] -
                         foot_holds[0, :]) * (j + 1) / num_nodes_double_support
                     cop = np.vstack((cop, tmp_cop))
-                    tmp_model = createPhaseModel(tmp_cop,
+                    tmp_model = createPhaseModel(robot_model,
+                                                 tmp_cop,
                                                  xref=np.array([
                                                      0.0, 0.0,
                                                      0.86 + tmp_cop[2], 0.1,
@@ -248,7 +267,8 @@ if __name__ == "__main__":
                         foot_holds[i, :] - foot_holds[i - 1, :]) * (
                             j + 1) / num_nodes_double_support
                     cop = np.vstack((cop, tmp_cop))
-                    tmp_model = createPhaseModel(tmp_cop,
+                    tmp_model = createPhaseModel(robot_model,
+                                                 tmp_cop,
                                                  xref=np.array([
                                                      0.0, 0.0,
                                                      0.86 + tmp_cop[2], 0.1,
@@ -261,7 +281,8 @@ if __name__ == "__main__":
                         foot_holds[i + 1, :] - foot_holds[i - 1, :]) * (
                             j + 1) / num_nodes_double_support
                     cop = np.vstack((cop, tmp_cop))
-                    tmp_model = createPhaseModel(tmp_cop,
+                    tmp_model = createPhaseModel(robot_model,
+                                                 tmp_cop,
                                                  xref=np.array([
                                                      0.0, 0.0,
                                                      0.86 + tmp_cop[2], 0.1,
@@ -271,14 +292,15 @@ if __name__ == "__main__":
 
         if phase[i] == 1 or phase[i] == -1:
             locoModel += [
-                createPhaseModel(foot_holds[i, :],
+                createPhaseModel(robot_model,
+                                 foot_holds[i, :],
                                  xref=np.array([
                                      0.0, 0.0, 0.86 + tmp_cop[2], 0.1, 0.0, 0.0
                                  ]))
             ] * num_nodes_single_support
             for j in range(num_nodes_single_support):
                 cop = np.vstack((cop, foot_holds[i, :]))
-    mT = createTerminalModel(np.array([0.08, 0.0, 0.00]))
+    mT = createTerminalModel(robot_model, np.array([0.08, 0.0, 0.00]))
 
     # import matplotlib.pyplot as plt
     # plt.plot(cop[:,1])

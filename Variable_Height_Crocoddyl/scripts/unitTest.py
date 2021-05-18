@@ -1,6 +1,6 @@
 import crocoddyl
 import numpy as np
-from variable_height_analytical_3D_CoP import DifferentialActionModelVariableHeightPendulum, DifferentialActionDataVariableHeightPendulum
+from variable_height_analytical_3D_CoP import DifferentialActionModelVariableHeightPendulum, buildSRBMFromRobot
 import example_robot_data
 import pinocchio
 
@@ -33,8 +33,9 @@ wutrack = 50
 wxbox = 1
 dt = 2e-2
 state = crocoddyl.StateVector(6)
-robot = example_robot_data.load("talos").model
-multibody_state = crocoddyl.StateMultibody(robot)
+robot = example_robot_data.load("talos")
+model = buildSRBMFromRobot(robot)
+multibody_state = crocoddyl.StateMultibody(model)
 runningCosts = crocoddyl.CostModelSum(state, 4)
 uRef = np.hstack([np.zeros(1), cop])
 Mu = 0.7
