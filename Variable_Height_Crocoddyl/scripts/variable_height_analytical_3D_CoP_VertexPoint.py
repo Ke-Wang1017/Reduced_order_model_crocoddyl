@@ -11,18 +11,19 @@ class DifferentialActionModelVariableHeightPendulum(
         crocoddyl.DifferentialActionModelAbstract):
     def __init__(self, state, costs):
         crocoddyl.DifferentialActionModelAbstract.__init__(
-            self, state, 4)  # nu = 1
+            self, state, 12)  # nu = 12: f_z, cop(3), vertex points(8)
 
         self._m = pinocchio.computeTotalMass(self.state.pinocchio)
         self._g = abs(self.state.pinocchio.gravity.linear[2])
-        self.contacts = crocoddyl.ContactModelMultiple(state, 4)
+        self.nu = 12
+        self.contacts = crocoddyl.ContactModelMultiple(state, self.nu)
         self.contacts.addContact(
             "single",
             crocoddyl.ContactModel3D(
-                state, crocoddyl.FrameTranslation(0, np.zeros(3)), 4))
+                state, crocoddyl.FrameTranslation(0, np.zeros(3)), self.nu))
         self.costs = costs
-        self.u_lb = np.array([100., -0.8, -0.12, 0.0])
-        self.u_ub = np.array([2.0 * self._m * self._g, 0.8, 0.12, 0.05])
+        self.u_lb = np.array([100., -0.8, -0.12, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.u_ub = np.array([2.0 * self._m * self._g, 0.8, 0.12, 0.05, 1.0, 1.0, 1.0, 1.0, 1.0])
 
     def calc(self, data, x, u):
         c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x  # how do you know cdot is the diff of c? From the Euler integration model
@@ -115,7 +116,7 @@ def createPhaseModel(robot_model,
                      nsurf=np.array([0., 0., 1.]).T,
                      mu=0.7,
                      Wx=np.array([0., 0., 10., 10., 10., 10.]),
-                     Wu=np.array([0., 50., 50., 1.]),
+                     Wu=np.array([0., 50., 50., 1., 1., 1., 1., 1., 1., 1., 1., 1.]),
                      wxreg=1,
                      wureg=5,
                      wutrack=50,
@@ -124,8 +125,8 @@ def createPhaseModel(robot_model,
     state = crocoddyl.StateVector(6)
     model = buildSRBMFromRobot(robot_model)
     multibody_state = crocoddyl.StateMultibody(model)
-    runningCosts = crocoddyl.CostModelSum(state, 4)
-    uRef = np.hstack([np.zeros(1), cop])
+    runningCosts = crocoddyl.CostModelSum(state, 10)
+    uRef = np.hstack([np.zeros(1), cop, 0.125*np.ones(8)])
     xRef = xref
     nSurf = nsurf
     Mu = mu
@@ -212,6 +213,7 @@ if __name__ == "__main__":
     phase = np.array([0, -1, 0, 1, 0])  # 0: double, 1: left, -1: right
     len_steps = phase.shape[0]
     robot_model = example_robot_data.load("talos")
+    ################ Foot Placement #############################################
     foot_placements = np.zeros((len_steps, 6))
     foot_orientations = np.zeros((len_steps, 6))
     for i in range(len_steps):
@@ -301,7 +303,7 @@ if __name__ == "__main__":
             for j in range(num_nodes_single_support):
                 cop = np.vstack((cop, foot_holds[i, :]))
     mT = createTerminalModel(robot_model, np.array([0.08, 0.0, 0.00]))
-
+############################################################################################################
     # import matplotlib.pyplot as plt
     # plt.plot(cop[:,1])
     # plt.show()
