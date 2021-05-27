@@ -11,19 +11,19 @@ class DifferentialActionModelVariableHeightPendulum(
         crocoddyl.DifferentialActionModelAbstract):
     def __init__(self, state, costs):
         crocoddyl.DifferentialActionModelAbstract.__init__(
-            self, state, 12)  # nu = 12: f_z, cop(3), vertex points(8)
+            self, state, 9)  # nu = 9: f_z, vertex points(8)
 
         self._m = pinocchio.computeTotalMass(self.state.pinocchio)
         self._g = abs(self.state.pinocchio.gravity.linear[2])
-        self.nu = 12
+        self.nu = 9
         self.contacts = crocoddyl.ContactModelMultiple(state, self.nu)
         self.contacts.addContact(
             "single",
             crocoddyl.ContactModel3D(
                 state, crocoddyl.FrameTranslation(0, np.zeros(3)), self.nu))
         self.costs = costs
-        self.u_lb = np.array([100., -0.8, -0.12, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        self.u_ub = np.array([2.0 * self._m * self._g, 0.8, 0.12, 0.05, 1.0, 1.0, 1.0, 1.0, 1.0])
+        self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.u_ub = np.array([2.0 * self._m * self._g, 1.0, 1.0, 1.0, 1.0, 1.0])
 
     def calc(self, data, x, u):
         c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x  # how do you know cdot is the diff of c? From the Euler integration model
@@ -125,7 +125,7 @@ def createPhaseModel(robot_model,
     state = crocoddyl.StateVector(6)
     model = buildSRBMFromRobot(robot_model)
     multibody_state = crocoddyl.StateMultibody(model)
-    runningCosts = crocoddyl.CostModelSum(state, 10)
+    runningCosts = crocoddyl.CostModelSum(state, 12)
     uRef = np.hstack([np.zeros(1), cop, 0.125*np.ones(8)])
     xRef = xref
     nSurf = nsurf
