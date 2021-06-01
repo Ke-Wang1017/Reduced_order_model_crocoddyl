@@ -111,12 +111,12 @@ def buildSRBMFromRobot(robot_model):
 
 
 def createPhaseModel(robot_model,
-                     cop,
+                     footstep,
                      xref=np.array([0.0, 0.0, 0.86, 0.15, 0.0, 0.0]),
                      nsurf=np.array([0., 0., 1.]).T,
                      mu=0.7,
                      Wx=np.array([0., 0., 10., 10., 10., 10.]),
-                     Wu=np.array([0., 50., 50., 1., 1., 1., 1., 1., 1., 1., 1., 1.]),
+                     Wu=np.array([50., 1., 1., 1., 1., 1., 1., 1., 1.]),
                      wxreg=1,
                      wureg=5,
                      wutrack=50,
@@ -125,15 +125,14 @@ def createPhaseModel(robot_model,
     state = crocoddyl.StateVector(6)
     model = buildSRBMFromRobot(robot_model)
     multibody_state = crocoddyl.StateMultibody(model)
-    runningCosts = crocoddyl.CostModelSum(state, 12)
-    uRef = np.hstack([np.zeros(1), cop, 0.125*np.ones(8)])
+    runningCosts = crocoddyl.CostModelSum(state, 9)
+    uRef = np.hstack([np.zeros(1), 0.125*np.ones(8)])
     xRef = xref
     nSurf = nsurf
     Mu = mu
-    # cone = crocoddyl.FrictionCone(nSurf, Mu, 1, False)
-    ub = np.hstack([cop, np.zeros(3)]) + np.array(
+    ub = np.hstack([footstep, np.zeros(3)]) + np.array(
         [0.3, 0.055, 0.95, 7., 7., 3])
-    lb = np.hstack([cop, np.zeros(3)]) + np.array(
+    lb = np.hstack([footstep, np.zeros(3)]) + np.array(
         [-0.3, -0.055, 0.75, -7., -7., -3])
     runningCosts.addCost(
         "comBox",
@@ -170,9 +169,9 @@ def createPhaseModel(robot_model,
     return crocoddyl.IntegratedActionModelEuler(model, dt)
 
 
-def createTerminalModel(robot_model, cop):
+def createTerminalModel(robot_model, footstep):
     return createPhaseModel(robot_model,
-                            cop,
+                            footstep,
                             xref=np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0]),
                             Wx=np.array([0., 10., 100., 10., 10., 150.]),
                             wxreg=1e6,
