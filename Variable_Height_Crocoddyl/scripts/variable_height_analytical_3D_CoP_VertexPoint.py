@@ -22,8 +22,17 @@ class DifferentialActionModelVariableHeightPendulum(
             crocoddyl.ContactModel3D(
                 state, crocoddyl.FrameTranslation(0, np.zeros(3)), self.nu))
         self.costs = costs
-        self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        self.u_ub = np.array([2.0 * self._m * self._g, 1.0, 1.0, 1.0, 1.0, 1.0])
+        self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.u_ub = np.array([2.0 * self._m * self._g, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+        self.foot_pos = np.zeros(6)
+        self.foot_ori = np.zeros(6)
+
+    def get_foothold(self, pos, ori):
+        self.foot_pos = pos
+        self.foot_ori = ori
+
+    def compute_cop_from_vertex(self):
+        
 
     def calc(self, data, x, u):
         c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x  # how do you know cdot is the diff of c? From the Euler integration model
@@ -70,6 +79,7 @@ class DifferentialActionModelVariableHeightPendulum(
                       [0.0, f_z / (c_z - u_z), -f_z * (c_y - u_y) / ((c_z - u_z)**2), 0.0, 0.0, 0.0],
                       [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
 
+        # needs to be modified
         data.contacts.contacts["single"].df_du[:, :] = np.array([[(c_x - u_x) / (c_z - u_z), -f_z / (c_z - u_z), 0.0, f_z * (c_x - u_x) / ((c_z - u_z)**2)],
                                                                  [(c_y - u_y) / (c_z - u_z), 0.0, -f_z / (c_z - u_z), f_z * (c_y - u_y) / ((c_z - u_z)**2)],
                                                                  [1.0, 0.0, 0.0, 0.0]])
@@ -82,10 +92,11 @@ class DifferentialActionModelVariableHeightPendulum(
 
 class DifferentialActionDataVariableHeightPendulum(
         crocoddyl.DifferentialActionDataAbstract):
-    def __init__(self, model):
+    def __init__(self, model, pos, rpy):
         crocoddyl.DifferentialActionDataAbstract.__init__(self, model)
         self.pinocchio = model.state.pinocchio.createData()
         self.contacts = model.contacts.createData(self.pinocchio)
+        self.pos =
         self.multibody = crocoddyl.DataCollectorMultibodyInContact(
             self.pinocchio, self.contacts)
         self.costs = model.costs.createData(self.multibody)
@@ -203,12 +214,13 @@ def plotComMotion(xs, us):
     plt.plot(u_y)
     plt.show()
 
-
 if __name__ == "__main__":
 
-    foot_holds = np.array([[0.0, 0.0, 0.0], [0.0, -0.085,
-                                             0.0], [0.05, 0.0, 0.0],
+    foot_holds = np.array([[0.0, 0.0, 0.0], [0.0, -0.085, 0.0], [0.05, 0.0, 0.0],
                            [0.1, 0.085, 0.0], [0.1, 0.0, 0.0]])
+    foot_size = [0.2, 0.1, 0]
+    Vs = np.array([[1, 1, 1], [-1, 1, 1], [-1, -1, 1],
+                   [1, -1, 1]]) * foot_size / 2  # distance of 4 vertexes from the center of foot
     phase = np.array([0, -1, 0, 1, 0])  # 0: double, 1: left, -1: right
     len_steps = phase.shape[0]
     robot_model = example_robot_data.load("talos")
@@ -302,7 +314,7 @@ if __name__ == "__main__":
             for j in range(num_nodes_single_support):
                 cop = np.vstack((cop, foot_holds[i, :]))
     mT = createTerminalModel(robot_model, np.array([0.08, 0.0, 0.00]))
-############################################################################################################
+##############################  Plot&Interpolate the data  #################################################
     # import matplotlib.pyplot as plt
     # plt.plot(cop[:,1])
     # plt.show()
