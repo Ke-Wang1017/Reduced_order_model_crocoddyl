@@ -6,6 +6,7 @@ import rospy
 import matplotlib.pyplot as plt
 import example_robot_data
 import pinocchio
+from util import rotx,roty,rotz
 
 class DifferentialActionModelVariableHeightPendulum(
         crocoddyl.DifferentialActionModelAbstract):
@@ -22,6 +23,8 @@ class DifferentialActionModelVariableHeightPendulum(
             crocoddyl.ContactModel3D(
                 state, crocoddyl.FrameTranslation(0, np.zeros(3)), self.nu))
         self.costs = costs
+        foot_size = [0.2, 0.1, 0]
+        self.Vs = np.array([[1, 1, 1], [-1, 1, 1], [-1, -1, 1], [1, -1, 1]]) * foot_size / 2 #distance of 4 vertexes from the center of foot
         self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         self.u_ub = np.array([2.0 * self._m * self._g, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
         self.foot_pos = np.zeros(6)
@@ -31,8 +34,14 @@ class DifferentialActionModelVariableHeightPendulum(
         self.foot_pos = pos
         self.foot_ori = ori
 
-    def compute_cop_from_vertex(self):
-        
+    def compute_cop_from_vertex(self, u):
+        left_pos = self.foot_pos[:3]
+        right_pos = self.foot_pos[3:]
+        left_ori = self.foot_ori[:3]
+        right_ori = self.foot_ori[3:]
+        cop = (left_pos + rotz(left_ori[2]) @ roty(left_ori[1]) @ rotx(left_ori[0]) @ self.Vs) @ u[1:5] + \
+              (right_pos + rotz(right_ori[2]) @ roty(right_ori[1]) @ rotx(right_ori[0]) @ self.Vs) @ u[5:]
+        return cop
 
     def calc(self, data, x, u):
         c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x  # how do you know cdot is the diff of c? From the Euler integration model
