@@ -1,7 +1,11 @@
 import crocoddyl
-import numpy as np
-from variable_height_analytical_3D_CoP_VertexPoint import DifferentialActionModelVariableHeightPendulum, buildSRBMFromRobot
 import example_robot_data
+import numpy as np
+
+from variable_height_analytical_3D_CoP_VertexPoint import DifferentialActionModelVariableHeightPendulum, \
+    buildSRBMFromRobot
+
+
 # import pinocchio
 
 class NumDiffException(Exception):
@@ -21,6 +25,7 @@ def assertNumDiff(A, B, threshold):
             "NumDiff exception, with residual of %.4g, above threshold %.4g" %
             (value, threshold))
 
+
 # cop = np.zeros(3)
 foot_pos = np.array([0.0, 0.2, 0.0, 0.0, -0.2, 0.0])
 cop = np.zeros(3)
@@ -39,7 +44,7 @@ robot = example_robot_data.load("talos")
 model = buildSRBMFromRobot(robot)
 multibody_state = crocoddyl.StateMultibody(model)
 runningCosts = crocoddyl.CostModelSum(state, 9)
-uRef = np.hstack([np.zeros(1), 0.125*np.ones(8)])
+uRef = np.hstack([np.zeros(1), 0.125 * np.ones(8)])
 Mu = 0.7
 # cone = crocoddyl.FrictionCone(nSurf, Mu, 1, False)
 ub = np.hstack([cop, np.zeros(3)]) + np.array(

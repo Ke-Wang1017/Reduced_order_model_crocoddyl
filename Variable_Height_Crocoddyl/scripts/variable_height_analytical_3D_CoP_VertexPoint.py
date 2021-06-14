@@ -14,21 +14,21 @@ class DifferentialActionModelVariableHeightPendulum(
     crocoddyl.DifferentialActionModelAbstract):
     def __init__(self, state, costs):
         crocoddyl.DifferentialActionModelAbstract.__init__(
-            self, state, 9)  # nu = 9: f_z, vertex points(8)
+            self, state, 8)  # nu = 9: f_z, vertex points(8)
 
         self._m = pinocchio.computeTotalMass(self.state.pinocchio)
         self._g = abs(self.state.pinocchio.gravity.linear[2])
-        self.contacts = crocoddyl.ContactModelMultiple(state, 9)
+        self.contacts = crocoddyl.ContactModelMultiple(state, 8)
         self.contacts.addContact(
             "single",
             crocoddyl.ContactModel3D(
-                state, crocoddyl.FrameTranslation(0, np.zeros(3)), 9))
+                state, crocoddyl.FrameTranslation(0, np.zeros(3)), 8))
         self.costs = costs
         foot_size = [0.2, 0.1, 0]
         self.Vs = np.array([[1, 1, 1], [-1, 1, 1], [-1, -1, 1],
                             [1, -1, 1]]) * foot_size / 2  # distance of 4 vertexes from the center of foot
-        self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        self.u_ub = np.array([2.0 * self._m * self._g, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+        self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.u_ub = np.array([2.0 * self._m * self._g, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
         self.foot_pos = np.zeros(6)
         self.foot_ori = np.zeros(6)
 
@@ -38,21 +38,23 @@ class DifferentialActionModelVariableHeightPendulum(
 
     def get_support_index(self, support_index):
         if support_index == -1:  # left support
-            self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-            self.u_ub = np.array([2.0 * self._m * self._g, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0])
+            self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            self.u_ub = np.array([2.0 * self._m * self._g, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0])
         if support_index == 1:  # right support
-            self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-            self.u_ub = np.array([2.0 * self._m * self._g, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0])
+            self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            self.u_ub = np.array([2.0 * self._m * self._g, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0])
 
     def compute_cop_from_vertex(self, u):
         left_pos = self.foot_pos[:3]
         right_pos = self.foot_pos[3:]
         left_ori = self.foot_ori[:3]
         right_ori = self.foot_ori[3:]
+        # needs to be modified
         cop = (np.tile(left_pos, (4, 1)).T + rotz(left_ori[2]).dot(roty(left_ori[1])).dot(rotx(left_ori[0])).dot(
             self.Vs.T)).dot(u[1:5]) + \
-              (np.tile(right_pos, (4, 1)).T + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(
-                  self.Vs.T)).dot(u[5:])
+              (np.tile(right_pos, (3, 1)).T + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(
+                  self.Vs[:3,:].T)).dot(u[5:]) + \
+              (right_pos + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(self.Vs[3,:].T)).dot(1- sum(u[1:]))
         return cop
 
     def calc(self, data, x, u):
@@ -112,13 +114,13 @@ class DifferentialActionModelVariableHeightPendulum(
               -f_z / ((c_z - u_z) * self._m),
               self._m * f_z * (c_y - u_y) / ((c_z - u_z) * self._m) ** 2],
              [1.0 / self._m, 0., 0., 0.]])  # needs to be modified
-        dtau_du = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        dtau_du = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
                             [0.0, left_vertex_1[0], left_vertex_2[0], left_vertex_3[0], left_vertex_4[0],
-                             right_vertex_1[0], right_vertex_2[0], right_vertex_3[0], right_vertex_4[0]],
+                             right_vertex_1[0], right_vertex_2[0], right_vertex_3[0]],
                             [0.0, left_vertex_1[1], left_vertex_2[1], left_vertex_3[1], left_vertex_4[1],
-                             right_vertex_1[1], right_vertex_2[1], right_vertex_3[1], right_vertex_4[1]],
+                             right_vertex_1[1], right_vertex_2[1], right_vertex_3[1]],
                             [0.0, left_vertex_1[2], left_vertex_2[2], left_vertex_3[2], left_vertex_4[2],
-                             right_vertex_1[2], right_vertex_2[2], right_vertex_3[2], right_vertex_4[2]]])  # 4*9
+                             right_vertex_1[2], right_vertex_2[2], right_vertex_3[2]]])  # 4*8
         data.Fu[:, :] = df_dtau.dot(dtau_du)
 
         data.contacts.contacts["single"].df_dx[:, :] = \
@@ -184,26 +186,25 @@ def createPhaseModel(robot_model,
                      nsurf=np.array([0., 0., 1.]).T,
                      mu=0.7,
                      Wx=np.array([0., 0., 10., 10., 10., 10.]),
-                     Wu=np.array([50., 1., 1., 1., 1., 1., 1., 1., 1.]),
+                     Wu=np.array([50., 1., 1., 1., 1., 1., 1., 1.]),
                      wxreg=1,
                      wureg=1,
-                     wutrack=10,
+                     wutrack=1e3,
                      wxbox=1,
                      dt=2e-2):
     state = crocoddyl.StateVector(6)
     model = buildSRBMFromRobot(robot_model)
     multibody_state = crocoddyl.StateMultibody(model)
-    runningCosts = crocoddyl.CostModelSum(state, 9)
+    runningCosts = crocoddyl.CostModelSum(state, 8)
     if support == -1:
         uRef = np.hstack(
-            [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.25, 0.25, 0.25, 0.25, 0.0, 0.0, 0.0, 0.0])
+            [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.25, 0.25, 0.25, 0.25, 0.0, 0.0, 0.0])
     elif support == 0:
         uRef = np.hstack(
-            [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125,
-             0.125])
+            [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125])
     elif support == 1:
         uRef = np.hstack(
-            [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.0, 0.0, 0.0, 0.0, 0.25, 0.25, 0.25, 0.25])
+            [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.0, 0.0, 0.0, 0.0, 0.25, 0.25, 0.25])
 
     xRef = xref
     nSurf = nsurf
@@ -219,14 +220,14 @@ def createPhaseModel(robot_model,
             state,
             crocoddyl.ActivationModelQuadraticBarrier(
                 crocoddyl.ActivationBounds(lb_x, ub_x)),
-            crocoddyl.ResidualModelState(state, xRef, 9)), wxbox)
+            crocoddyl.ResidualModelState(state, xRef, 8)), wxbox)
     # --------------- Track State Ref ------------------ #
     runningCosts.addCost(
         "comTrack",
         crocoddyl.CostModelResidual(
             state,
             crocoddyl.ActivationModelWeightedQuad(Wx),
-            crocoddyl.ResidualModelState(state, xRef, 9)), wxreg)
+            crocoddyl.ResidualModelState(state, xRef, 8)), wxreg)
     # --------------- Track Control Ref ------------------ #
     runningCosts.addCost("uTrack",
                          crocoddyl.CostModelResidual(
@@ -236,7 +237,7 @@ def createPhaseModel(robot_model,
     # --------------- Minimize Control ------------------ #
     runningCosts.addCost("uReg",
                          crocoddyl.CostModelResidual(
-                             state, crocoddyl.ResidualModelControl(state, 9)),
+                             state, crocoddyl.ResidualModelControl(state, 8)),
                          wureg)  ## ||u||^2
     # --------------- Friction Cone Constraint ------------------ #
     cone = crocoddyl.FrictionCone(np.eye(3), Mu)
@@ -247,21 +248,17 @@ def createPhaseModel(robot_model,
             crocoddyl.ActivationModelQuadraticBarrier(
                 crocoddyl.ActivationBounds(cone.lb, cone.ub)),
             crocoddyl.ResidualModelContactFrictionCone(multibody_state, 0,
-                                                       cone, 9)), 1e2)
+                                                       cone, 8)), 1e2)
     # --------------- Control Residual Constraint ------------------ #
-    # r = ControlResidual(state, 8)
-    # col = crocoddyl.DataCollectorAbstract()
-    # d_r = r.createData(col)
-    # lb_dr = np.array([0])
-    # ub_dr = np.array([1])
-    # runningCosts.addCost(
-    #     state,
-    #     "Control Bound Constraint",
-    #     crocoddyl.CostModelResidual(
-    #     crocoddyl.ActivationModelQuadraticBarrier(
-    #         crocoddyl.ActivationBounds(lb_dr, ub_dr)),
-    #     ControlResidual(state, 8), 1e5)
-    # )
+    lb_dr = np.array([0.])
+    ub_dr = np.array([1.])
+    runningCosts.addCost(
+        "Control Bound Constraint",
+        crocoddyl.CostModelResidual(
+            state,
+            crocoddyl.ActivationModelQuadraticBarrier(
+                crocoddyl.ActivationBounds(lb_dr, ub_dr)),
+            ControlResidual(state, 8)), 1e3)
 
     model = DifferentialActionModelVariableHeightPendulum(
         multibody_state, runningCosts)
@@ -311,9 +308,9 @@ if __name__ == "__main__":
 
     foot_holds = np.array([[0.0, 0.0, 0.0], [0.0, -0.085, 0.0], [0.05, 0.0, 0.0],
                            [0.1, 0.085, 0.0], [0.1, 0.0, 0.0]])
-    foot_size = [0.2, 0.1, 0]
-    Vs = np.array([[1, 1, 1], [-1, 1, 1], [-1, -1, 1],
-                   [1, -1, 1]]) * foot_size / 2  # distance of 4 vertexes from the center of foot
+    # foot_size = [0.2, 0.1, 0]
+    # Vs = np.array([[1, 1, 1], [-1, 1, 1], [-1, -1, 1],
+    #                [1, -1, 1]]) * foot_size / 2  # distance of 4 vertexes from the center of foot
     phase = np.array([0, -1, 0, 1, 0])  # 0: double, 1: left, -1: right
     len_steps = phase.shape[0]
     robot_model = example_robot_data.load("talos")
@@ -421,7 +418,7 @@ if __name__ == "__main__":
     # plt.plot(cop[:,1])
     # plt.show()
 
-    u_init = np.array([931.95, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125])
+    u_init = np.array([931.95, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125])
     x_init = np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0])
     problem = crocoddyl.ShootingProblem(x_init, locoModel, mT)
     solver = crocoddyl.SolverBoxFDDP(problem)
@@ -429,7 +426,7 @@ if __name__ == "__main__":
     solver.setCallbacks([log, crocoddyl.CallbackVerbose()])
     t0 = time.time()
     solver.solve([x_init] * (problem.T + 1), [u_init] * problem.T,
-                 10)  # x init, u init, max iteration
+                 5)  # x init, u init, max iteration
     print('Time of iteration consumed', time.time() - t0)
     plotComMotion(solver.xs, solver.us)
 

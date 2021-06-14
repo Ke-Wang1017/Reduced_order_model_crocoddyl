@@ -1,6 +1,5 @@
-import os
-import rospy
 import numpy as np
+import rospy
 
 
 def publish_footplacements(footplacements, param_name):
@@ -108,7 +107,6 @@ def publish_all(com_trajectory, support_durations, support_indexes,
             break
     except rospy.ROSInterruptException:
         pass
-
 
 # if __name__ == "__main__":
 # publish_all()
