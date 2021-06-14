@@ -32,7 +32,7 @@ class DifferentialActionModelVariableHeightPendulum(
         self.foot_ori = ori
 
     def compute_cop_from_vertex(self):
-        
+
 
     def calc(self, data, x, u):
         c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x  # how do you know cdot is the diff of c? From the Euler integration model
