@@ -37,10 +37,10 @@ class DifferentialActionModelVariableHeightPendulum(
         self.foot_ori = ori
 
     def get_support_index(self, support_index):
-        if support_index == -1:  # left support
+        if support_index == 1:  # left support
             self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
             self.u_ub = np.array([2.0 * self._m * self._g, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0])
-        if support_index == 1:  # right support
+        if support_index == -1:  # right support
             self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
             self.u_ub = np.array([2.0 * self._m * self._g, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0])
 
@@ -58,7 +58,7 @@ class DifferentialActionModelVariableHeightPendulum(
         return cop
 
     def calc(self, data, x, u):
-        c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x  # how do you know cdot is the diff of c? From the Euler integration model
+        c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x  # how do you know cdot is the diff of c? implicit written in the source code of crocoddyl
         f_z = u.item(0)
         [u_x, u_y, u_z] = self.compute_cop_from_vertex(u)
 
@@ -132,7 +132,6 @@ class DifferentialActionModelVariableHeightPendulum(
         # needs to be modified
         # data.contacts.contacts["single"].df_du[:, :] = np.array([[(c_x - u_x) / (c_z - u_z), -f_z / (c_z - u_z), 0.0, f_z * (c_x - u_x) / ((c_z - u_z)**2)],
         #                                                          [(c_y - u_y) / (c_z - u_z), 0.0, -f_z / (c_z - u_z), f_z * (c_y - u_y) / ((c_z - u_z)**2)],
-        #      Simultaneous Contact, Gait and Motion Planning                                                    [1.0, 0.0, 0.0, 0.0]])
 
         contact_df_dtau = np.array(
             [[(c_x - u_x) / (c_z - u_z), -f_z / (c_z - u_z), 0.0, f_z * (c_x - u_x) / ((c_z - u_z) ** 2)],
@@ -192,18 +191,18 @@ def createPhaseModel(robot_model,
                      wureg=1,
                      wutrack=50,
                      wxbox=1,
-                     dt=2e-2):
+                     dt=4e-2):
     state = crocoddyl.StateVector(6)
     model = buildSRBMFromRobot(robot_model)
     multibody_state = crocoddyl.StateMultibody(model)
     runningCosts = crocoddyl.CostModelSum(state, 8)
-    if support == -1:
+    if support == 1: # Left support
         uRef = np.hstack(
             [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.25, 0.25, 0.25, 0.25, 0.0, 0.0, 0.0])
-    elif support == 0:
+    elif support == 0: # Double support
         uRef = np.hstack(
             [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125])
-    elif support == 1:
+    elif support == -1: # Right support
         uRef = np.hstack(
             [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.0, 0.0, 0.0, 0.0, 0.25, 0.25, 0.25])
 
@@ -308,19 +307,16 @@ def plotComMotion(xs, us):
 if __name__ == "__main__":
 
     foot_holds = np.array([[0.0, 0.0, 0.0], [0.0, -0.085, 0.0], [0.05, 0.0, 0.0],
-                           [0.1, 0.085, 0.0], [0.1, 0.0, 0.0]])
-    # foot_size = [0.2, 0.1, 0]
-    # Vs = np.array([[1, 1, 1], [-1, 1, 1], [-1, -1, 1],
-    #                [1, -1, 1]]) * foot_size / 2  # distance of 4 vertexes from the center of foot
+                           [0.1, 0.085, 0.0], [0.1, 0.0, 0.0]]) # footsteps given
     phase = np.array([0, -1, 0, 1, 0])  # 0: double, 1: left, -1: right
     len_steps = phase.shape[0]
     robot_model = example_robot_data.load("talos")
     ################ Foot Placement #############################################
-    foot_placements = np.zeros((len_steps, 6))
+    foot_placements = np.zeros((len_steps, 6)) # :3, left support. 3:, right support
     foot_orientations = np.zeros((len_steps, 6))
     for i in range(len_steps):
         if phase[i] == 0:
-            if i == 0:
+            if i == 0 or i == len_steps-1:
                 foot_placements[i, 0] = foot_holds[i, 0]
                 foot_placements[i, 2] = foot_holds[i, 2]
                 foot_placements[i, 3] = foot_holds[i, 0]
@@ -329,17 +325,17 @@ if __name__ == "__main__":
                 foot_placements[i, 4] = foot_holds[i, 1] - 0.085
             else:
                 foot_placements[i, :] = foot_placements[i - 1, :]
-        elif phase[i] == -1:
-            foot_placements[i, 3:] = foot_holds[i, :]
-            foot_placements[i, :3] = foot_placements[i - 1, :3]
-        elif phase[i] == 1:
-            foot_placements[i, :3] = foot_holds[i, :]
-            foot_placements[i, 3:] = foot_placements[i - 1, 3:]
+        elif phase[i] == -1: # right support
+            foot_placements[i, :3] = foot_holds[i+1, :]
+            foot_placements[i, 3:] = foot_placements[i - 1, :3]
+        elif phase[i] == 1: # left support
+            foot_placements[i, 3:] = foot_holds[i+1, :]
+            foot_placements[i, :3] = foot_placements[i - 1, 3:]
     print('Foot placements are ', foot_placements)
     num_nodes_single_support = 40
     num_nodes_double_support = 20
-    dt = 2e-2
-    support_indexes = np.array([0, -1, 0, 1, 0])
+    dt = 4e-2
+    support_indexes = phase
     support_durations = np.zeros(len_steps)
     for i in range(len_steps):
         if support_indexes[i] == 0:
