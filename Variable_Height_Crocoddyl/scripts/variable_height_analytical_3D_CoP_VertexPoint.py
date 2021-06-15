@@ -54,7 +54,7 @@ class DifferentialActionModelVariableHeightPendulum(
             self.Vs.T)).dot(u[1:5]) + \
               (np.tile(right_pos, (3, 1)).T + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(
                   self.Vs[:3,:].T)).dot(u[5:]) + \
-              (right_pos + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(self.Vs[3,:].T)).dot(1- sum(u[1:]))
+              (right_pos + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(self.Vs[3,:].T))*(1- sum(u[1:]))
         return cop
 
     def calc(self, data, x, u):
@@ -114,13 +114,14 @@ class DifferentialActionModelVariableHeightPendulum(
               -f_z / ((c_z - u_z) * self._m),
               self._m * f_z * (c_y - u_y) / ((c_z - u_z) * self._m) ** 2],
              [1.0 / self._m, 0., 0., 0.]])  # needs to be modified
+        du_tmp = right_pos + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(right_vertex_4)
         dtau_du = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                            [0.0, left_vertex_1[0], left_vertex_2[0], left_vertex_3[0], left_vertex_4[0],
-                             right_vertex_1[0], right_vertex_2[0], right_vertex_3[0]],
-                            [0.0, left_vertex_1[1], left_vertex_2[1], left_vertex_3[1], left_vertex_4[1],
-                             right_vertex_1[1], right_vertex_2[1], right_vertex_3[1]],
-                            [0.0, left_vertex_1[2], left_vertex_2[2], left_vertex_3[2], left_vertex_4[2],
-                             right_vertex_1[2], right_vertex_2[2], right_vertex_3[2]]])  # 4*8
+                            [0.0, left_vertex_1[0]-du_tmp[0], left_vertex_2[0]-du_tmp[0], left_vertex_3[0]-du_tmp[0], left_vertex_4[0]-du_tmp[0],
+                             right_vertex_1[0]-du_tmp[0], right_vertex_2[0]-du_tmp[0], right_vertex_3[0]-du_tmp[0]],
+                            [0.0, left_vertex_1[1]-du_tmp[1], left_vertex_2[1]-du_tmp[1], left_vertex_3[1]-du_tmp[1], left_vertex_4[1]-du_tmp[1],
+                             right_vertex_1[1]-du_tmp[1], right_vertex_2[1]-du_tmp[1], right_vertex_3[1]-du_tmp[1]],
+                            [0.0, left_vertex_1[2]-du_tmp[2], left_vertex_2[2]-du_tmp[2], left_vertex_3[2]-du_tmp[2], left_vertex_4[2]-du_tmp[2],
+                             right_vertex_1[2]-du_tmp[2], right_vertex_2[2]-du_tmp[2], right_vertex_3[2]-du_tmp[2]]])  # 4*8
         data.Fu[:, :] = df_dtau.dot(dtau_du)
 
         data.contacts.contacts["single"].df_dx[:, :] = \
@@ -189,7 +190,7 @@ def createPhaseModel(robot_model,
                      Wu=np.array([50., 1., 1., 1., 1., 1., 1., 1.]),
                      wxreg=1,
                      wureg=1,
-                     wutrack=1e3,
+                     wutrack=50,
                      wxbox=1,
                      dt=2e-2):
     state = crocoddyl.StateVector(6)
@@ -248,7 +249,7 @@ def createPhaseModel(robot_model,
             crocoddyl.ActivationModelQuadraticBarrier(
                 crocoddyl.ActivationBounds(cone.lb, cone.ub)),
             crocoddyl.ResidualModelContactFrictionCone(multibody_state, 0,
-                                                       cone, 8)), 1e2)
+                                                       cone, 8)), 1e2) #
     # --------------- Control Residual Constraint ------------------ #
     lb_dr = np.array([0.])
     ub_dr = np.array([1.])
@@ -258,7 +259,7 @@ def createPhaseModel(robot_model,
             state,
             crocoddyl.ActivationModelQuadraticBarrier(
                 crocoddyl.ActivationBounds(lb_dr, ub_dr)),
-            ControlResidual(state, 8)), 1e3)
+            ControlResidual(state, 8)), 1e2)
 
     model = DifferentialActionModelVariableHeightPendulum(
         multibody_state, runningCosts)
@@ -273,7 +274,7 @@ def createTerminalModel(robot_model, cop, foot_pos, foot_ori):
                             foot_pos,
                             foot_ori,
                             xref=np.array([0.1, 0.0, 0.86, 0.0, 0.0, 0.0]),
-                            Wx=np.array([10., 10., 50., 10., 10., 50.]),
+                            Wx=np.array([50., 10., 50., 10., 10., 50.]),
                             wxreg=1e6,
                             dt=0.)
 
@@ -360,6 +361,7 @@ if __name__ == "__main__":
                                                  tmp_cop,
                                                  foot_placements[i, :],
                                                  foot_orientations[i, :],
+                                                 support=phase[i],
                                                  xref=np.array([
                                                      0.0, 0.0,
                                                      0.86 + tmp_cop[2], 0.1,
@@ -376,6 +378,7 @@ if __name__ == "__main__":
                                                  tmp_cop,
                                                  foot_placements[i, :],
                                                  foot_orientations[i, :],
+                                                 support=phase[i],
                                                  xref=np.array([
                                                      0.0, 0.0,
                                                      0.86 + tmp_cop[2], 0.1,
@@ -392,6 +395,7 @@ if __name__ == "__main__":
                                                  tmp_cop,
                                                  foot_placements[i, :],
                                                  foot_orientations[i, :],
+                                                 support=phase[i],
                                                  xref=np.array([
                                                      0.0, 0.0,
                                                      0.86 + tmp_cop[2], 0.1,
@@ -405,6 +409,7 @@ if __name__ == "__main__":
                                               foot_holds[i, :],
                                               foot_placements[i, :],
                                               foot_orientations[i, :],
+                                              support=phase[i],
                                               xref=np.array([
                                                   0.0, 0.0, 0.86 + tmp_cop[2], 0.1, 0.0, 0.0
                                               ]))

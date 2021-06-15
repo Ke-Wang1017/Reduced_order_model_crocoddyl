@@ -4,6 +4,7 @@ import numpy as np
 
 from variable_height_analytical_3D_CoP_VertexPoint import DifferentialActionModelVariableHeightPendulum, \
     buildSRBMFromRobot
+from ResidualControlClass import ControlResidual
 
 
 # import pinocchio
@@ -33,7 +34,7 @@ foot_ori = np.zeros(6)
 xRef = np.array([0.0, 0.0, 0.86, 0.15, 0.0, 0.0])
 nSurf = np.array([0., 0., 1.]).T
 Wx = np.array([0., 10., 10., 10., 10., 10.])
-Wu = np.array([50., 10., 10., 10., 10., 10., 10., 10., 10.])
+Wu = np.array([50., 10., 10., 10., 10., 10., 10., 10.])
 wxreg = 1
 wureg = 5
 wutrack = 50
@@ -43,8 +44,8 @@ state = crocoddyl.StateVector(6)
 robot = example_robot_data.load("talos")
 model = buildSRBMFromRobot(robot)
 multibody_state = crocoddyl.StateMultibody(model)
-runningCosts = crocoddyl.CostModelSum(state, 9)
-uRef = np.hstack([np.zeros(1), 0.125 * np.ones(8)])
+runningCosts = crocoddyl.CostModelSum(state, 8)
+uRef = np.hstack([np.zeros(1), 0.125 * np.ones(7)])
 Mu = 0.7
 # cone = crocoddyl.FrictionCone(nSurf, Mu, 1, False)
 ub = np.hstack([cop, np.zeros(3)]) + np.array(
@@ -57,12 +58,12 @@ runningCosts.addCost(
         state,
         crocoddyl.ActivationModelQuadraticBarrier(
             crocoddyl.ActivationBounds(lb, ub)),
-        crocoddyl.ResidualModelState(state, xRef, 9)), wxbox)
+        crocoddyl.ResidualModelState(state, xRef, 8)), wxbox)
 runningCosts.addCost(
     "comReg",
     crocoddyl.CostModelResidual(
         state, crocoddyl.ActivationModelWeightedQuad(Wx),
-        crocoddyl.ResidualModelState(state, xRef, 9)), wxreg)
+        crocoddyl.ResidualModelState(state, xRef, 8)), wxreg)
 runningCosts.addCost("uTrack",
                      crocoddyl.CostModelResidual(
                          state, crocoddyl.ActivationModelWeightedQuad(Wu),
@@ -70,7 +71,7 @@ runningCosts.addCost("uTrack",
                      wureg)  ## ||u||^2
 runningCosts.addCost("uReg",
                      crocoddyl.CostModelResidual(
-                         state, crocoddyl.ResidualModelControl(state, 9)),
+                         state, crocoddyl.ResidualModelControl(state, 8)),
                      wutrack)  ## ||u||^2
 cone = crocoddyl.FrictionCone(np.eye(3), Mu)
 runningCosts.addCost(
@@ -80,7 +81,16 @@ runningCosts.addCost(
         crocoddyl.ActivationModelQuadraticBarrier(
             crocoddyl.ActivationBounds(cone.lb, cone.ub)),
         crocoddyl.ResidualModelContactFrictionCone(multibody_state, 0,
-                                                   cone, 9)), 1e2)
+                                                   cone, 8)), 1e2)
+lb_dr = np.array([0.])
+ub_dr = np.array([1.])
+runningCosts.addCost(
+    "Control Bound Constraint",
+    crocoddyl.CostModelResidual(
+        state,
+        crocoddyl.ActivationModelQuadraticBarrier(
+            crocoddyl.ActivationBounds(lb_dr, ub_dr)),
+        ControlResidual(state, 8)), 1e2)
 model = DifferentialActionModelVariableHeightPendulum(multibody_state, runningCosts)
 data = model.createData()
 model.get_foothold(foot_pos, foot_ori)
@@ -88,7 +98,7 @@ mnum = crocoddyl.DifferentialActionModelNumDiff(model, False)
 dnum = mnum.createData()
 
 xrand = np.random.rand(6)
-urand = np.random.rand(9)
+urand = np.random.rand(8)
 model.calc(data, xrand, urand)
 model.calcDiff(data, xrand, urand)
 mnum.calc(dnum, xrand, urand)
