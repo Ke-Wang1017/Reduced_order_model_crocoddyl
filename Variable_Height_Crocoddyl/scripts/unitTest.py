@@ -28,7 +28,7 @@ def assertNumDiff(A, B, threshold):
 
 
 # cop = np.zeros(3)
-foot_pos = np.array([0.0, 0.2, 0.0, 0.0, -0.2, 0.0])
+foot_pos = np.array([0.0, 0.1, 0.0, 0.0, -0.1, 0.0])
 cop = np.zeros(3)
 foot_ori = np.zeros(6)
 xRef = np.array([0.0, 0.0, 0.86, 0.15, 0.0, 0.0])

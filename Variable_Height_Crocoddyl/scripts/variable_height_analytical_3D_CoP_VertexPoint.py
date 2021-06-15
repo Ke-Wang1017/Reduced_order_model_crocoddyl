@@ -54,7 +54,7 @@ class DifferentialActionModelVariableHeightPendulum(
             self.Vs.T)).dot(u[1:5]) + \
               (np.tile(right_pos, (3, 1)).T + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(
                   self.Vs[:3,:].T)).dot(u[5:]) + \
-              (right_pos + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(self.Vs[3,:].T))*(1- sum(u[1:]))
+              (right_pos + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(self.Vs[3,:].T)).dot(1- sum(u[1:]))
         return cop
 
     def calc(self, data, x, u):
@@ -114,14 +114,14 @@ class DifferentialActionModelVariableHeightPendulum(
               -f_z / ((c_z - u_z) * self._m),
               self._m * f_z * (c_y - u_y) / ((c_z - u_z) * self._m) ** 2],
              [1.0 / self._m, 0., 0., 0.]])  # needs to be modified
-        du_tmp = right_pos + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(right_vertex_4)
+        # du_tmp = right_pos + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(right_vertex_4)
         dtau_du = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                            [0.0, left_vertex_1[0]-du_tmp[0], left_vertex_2[0]-du_tmp[0], left_vertex_3[0]-du_tmp[0], left_vertex_4[0]-du_tmp[0],
-                             right_vertex_1[0]-du_tmp[0], right_vertex_2[0]-du_tmp[0], right_vertex_3[0]-du_tmp[0]],
-                            [0.0, left_vertex_1[1]-du_tmp[1], left_vertex_2[1]-du_tmp[1], left_vertex_3[1]-du_tmp[1], left_vertex_4[1]-du_tmp[1],
-                             right_vertex_1[1]-du_tmp[1], right_vertex_2[1]-du_tmp[1], right_vertex_3[1]-du_tmp[1]],
-                            [0.0, left_vertex_1[2]-du_tmp[2], left_vertex_2[2]-du_tmp[2], left_vertex_3[2]-du_tmp[2], left_vertex_4[2]-du_tmp[2],
-                             right_vertex_1[2]-du_tmp[2], right_vertex_2[2]-du_tmp[2], right_vertex_3[2]-du_tmp[2]]])  # 4*8
+                            [0.0, left_vertex_1[0]-right_vertex_4[0], left_vertex_2[0]-right_vertex_4[0], left_vertex_3[0]-right_vertex_4[0], left_vertex_4[0]-right_vertex_4[0],
+                             right_vertex_1[0]-right_vertex_4[0], right_vertex_2[0]-right_vertex_4[0], right_vertex_3[0]-right_vertex_4[0]],
+                            [0.0, left_vertex_1[1]-right_vertex_4[1], left_vertex_2[1]-right_vertex_4[1], left_vertex_3[1]-right_vertex_4[1], left_vertex_4[1]-right_vertex_4[1],
+                             right_vertex_1[1]-right_vertex_4[1], right_vertex_2[1]-right_vertex_4[1], right_vertex_3[1]-right_vertex_4[1]],
+                            [0.0, left_vertex_1[2]-right_vertex_4[2], left_vertex_2[2]-right_vertex_4[2], left_vertex_3[2]-right_vertex_4[2], left_vertex_4[2]-right_vertex_4[2],
+                             right_vertex_1[2]-right_vertex_4[2], right_vertex_2[2]-right_vertex_4[2], right_vertex_3[2]-right_vertex_4[2]]])  # 4*8
         data.Fu[:, :] = df_dtau.dot(dtau_du)
 
         data.contacts.contacts["single"].df_dx[:, :] = \
