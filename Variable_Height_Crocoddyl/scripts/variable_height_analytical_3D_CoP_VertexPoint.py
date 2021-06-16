@@ -308,12 +308,13 @@ if __name__ == "__main__":
 
     foot_holds = np.array([[0.0, 0.0, 0.0], [0.0, -0.085, 0.0], [0.05, 0.0, 0.0],
                            [0.1, 0.085, 0.0], [0.1, 0.0, 0.0]]) # footsteps given
-    phase = np.array([0, -1, 0, 1, 0])  # 0: double, 1: left, -1: right
+    phase = np.array([0, 1, 0, -1, 0])  # 0: double, 1: left, -1: right
     len_steps = phase.shape[0]
     robot_model = example_robot_data.load("talos")
     ################ Foot Placement #############################################
     foot_placements = np.zeros((len_steps, 6)) # :3, left support. 3:, right support
     foot_orientations = np.zeros((len_steps, 6))
+    ######### Should not do this, directly generate footplacements instead generating from CoP #################
     for i in range(len_steps):
         if phase[i] == 0:
             if i == 0 or i == len_steps-1:
@@ -327,14 +328,18 @@ if __name__ == "__main__":
                 foot_placements[i, :] = foot_placements[i - 1, :]
         elif phase[i] == -1: # right support
             foot_placements[i, :3] = foot_holds[i+1, :]
-            foot_placements[i, 3:] = foot_placements[i - 1, :3]
+            foot_placements[i, 1] = 0.085
+            foot_placements[i, 3:] = foot_placements[i - 1, 3:]
         elif phase[i] == 1: # left support
-            foot_placements[i, 3:] = foot_holds[i+1, :]
-            foot_placements[i, :3] = foot_placements[i - 1, 3:]
+            foot_placements[i, 3:] = foot_holds[i+2, :]
+            foot_placements[i, :3] = foot_placements[i - 1, :3]
+            foot_placements[i, 4] = -0.085
     print('Foot placements are ', foot_placements)
-    num_nodes_single_support = 40
-    num_nodes_double_support = 20
-    dt = 4e-2
+
+
+    num_nodes_single_support = 20
+    num_nodes_double_support = 10
+    dt = 6e-2
     support_indexes = phase
     support_durations = np.zeros(len_steps)
     for i in range(len_steps):
