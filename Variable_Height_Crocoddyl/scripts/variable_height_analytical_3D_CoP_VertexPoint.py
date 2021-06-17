@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pinocchio
 
-from util import rotx, roty, rotz
+from util import rotx, roty, rotz, rotRollPitchYaw
+from math import sqrt
 from ResidualControlClass import ControlResidual
 
 
@@ -114,7 +115,6 @@ class DifferentialActionModelVariableHeightPendulum(
               -f_z / ((c_z - u_z) * self._m),
               self._m * f_z * (c_y - u_y) / ((c_z - u_z) * self._m) ** 2],
              [1.0 / self._m, 0., 0., 0.]])  # needs to be modified
-        # du_tmp = right_pos + rotz(right_ori[2]).dot(roty(right_ori[1])).dot(rotx(right_ori[0])).dot(right_vertex_4)
         dtau_du = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
                             [0.0, left_vertex_1[0]-right_vertex_4[0], left_vertex_2[0]-right_vertex_4[0], left_vertex_3[0]-right_vertex_4[0], left_vertex_4[0]-right_vertex_4[0],
                              right_vertex_1[0]-right_vertex_4[0], right_vertex_2[0]-right_vertex_4[0], right_vertex_3[0]-right_vertex_4[0]],
@@ -176,6 +176,50 @@ def buildSRBMFromRobot(robot_model):
     return model
 
 
+def get_friction_rays(ori, mu):
+    x_p = np.array([mu / (sqrt(mu ** 2 + 1)), 0, 1 / (sqrt(mu ** 2 + 1))])
+    x_n = np.array([-mu / (sqrt(mu ** 2 + 1)), 0, 1 / (sqrt(mu ** 2 + 1))])
+    y_p = np.array([0, mu / (sqrt(mu ** 2 + 1)), 1 / (sqrt(mu ** 2 + 1))])
+    y_n = np.array([0, -mu / (sqrt(mu ** 2 + 1)), 1 / (sqrt(mu ** 2 + 1))])
+    ori_L = ori[:3]
+    ori_R = ori[3:]
+    R_L = rotRollPitchYaw(ori_L[0], ori_L[1], ori_L[2])
+    R_R = rotRollPitchYaw(ori_R[0], ori_R[1], ori_R[2])
+    x_p_l = R_L.dot(x_p)
+    x_n_l = R_L.dot(x_n)
+    y_p_l = R_L.dot(y_p)
+    y_n_l = R_L.dot(y_n)
+
+    x_p_r = R_R.dot(x_p)
+    x_n_r = R_R.dot(x_n)
+    y_p_r = R_R.dot(y_p)
+    y_n_r = R_R.dot(y_n)
+
+    x_p_out = np.zeros(3)
+    x_n_out = np.zeros(3)
+    y_p_out = np.zeros(3)
+    y_n_out = np.zeros(3)
+
+    if x_p_r[2] > x_p_l[2]:
+        x_p_out = x_p_l
+    else:
+        x_p_out = x_p_r
+    if x_n_r[2] > x_n_l[2]:
+        x_n_out = x_n_l
+    else:
+        x_n_out = x_n_r
+    if y_p_r[2] > y_p_l[2]:
+        y_p_out = y_p_l
+    else:
+        y_p_out = y_p_r
+    if y_n_r[2] > y_n_l[2]:
+        y_n_out = y_n_l
+    else:
+        y_n_out = y_n_r
+
+    return x_p_out, x_n_out, y_p_out, y_n_out
+
+
 # add constraints for sum of weight
 def createPhaseModel(robot_model,
                      cop,
@@ -207,7 +251,6 @@ def createPhaseModel(robot_model,
             [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.0, 0.0, 0.0, 0.0, 0.25, 0.25, 0.25])
 
     xRef = xref
-    nSurf = nsurf
     Mu = mu
     ub_x = np.hstack([cop, np.zeros(3)]) + np.array(
         [0.3, 0.055, 0.95, 7., 7., 3])
@@ -267,12 +310,12 @@ def createPhaseModel(robot_model,
     return crocoddyl.IntegratedActionModelEuler(model, dt)
 
 
-def createTerminalModel(robot_model, cop, foot_pos, foot_ori):
+def createTerminalModel(robot_model, cop, foot_pos, foot_ori, xref):
     return createPhaseModel(robot_model,
                             cop,
                             foot_pos,
                             foot_ori,
-                            xref=np.array([0.1, 0.0, 0.86, 0.0, 0.0, 0.0]),
+                            xref=xref,
                             Wx=np.array([50., 10., 50., 10., 10., 50.]),
                             wxreg=1e6,
                             dt=0.)
@@ -306,14 +349,16 @@ def plotComMotion(xs, us):
 
 if __name__ == "__main__":
 
-    foot_holds = np.array([[0.0, 0.0, 0.0], [0.0, -0.085, 0.0], [0.05, 0.0, 0.0],
-                           [0.1, 0.085, 0.0], [0.1, 0.0, 0.0]]) # footsteps given
+    foot_holds = np.array([[0.0, 0.0, 0.0], [0.0, -0.085, 0.05], [0.05, 0.0, 0.05],
+                           [0.1, 0.085, 0.1], [0.1, 0.0, 0.1]]) # footsteps given
     phase = np.array([0, 1, 0, -1, 0])  # 0: double, 1: left, -1: right
     len_steps = phase.shape[0]
     robot_model = example_robot_data.load("talos")
     ################ Foot Placement #############################################
     foot_placements = np.zeros((len_steps, 6)) # :3, left support. 3:, right support
     foot_orientations = np.zeros((len_steps, 6))
+    foot_orientations[1:, 0] = np.deg2rad(-15)
+    foot_orientations[1:, 3] = np.deg2rad(15)
     ######### Should not do this, directly generate footplacements instead generating from CoP #################
     for i in range(len_steps):
         if phase[i] == 0:
@@ -417,7 +462,8 @@ if __name__ == "__main__":
                          ] * num_nodes_single_support
             for j in range(num_nodes_single_support):
                 cop = np.vstack((cop, foot_holds[i, :]))
-    mT = createTerminalModel(robot_model, np.array([0.1, 0.0, 0.00]), foot_placements[-1, :], foot_orientations[-1, :])
+    x_ref_final = np.array([(foot_placements[-1,0]+foot_placements[-1,3])/2,(foot_placements[-1,1]+foot_placements[-1,4])/2,(foot_placements[-1,2]+foot_placements[-1,5])/2+0.86, 0., 0., 0.])
+    mT = createTerminalModel(robot_model, np.array([0.1, 0.0, 0.00]), foot_placements[-1, :], foot_orientations[-1, :], xref=x_ref_final)
 
     ##############################  Plot&Interpolate the data  #################################################
     # import matplotlib.pyplot as plt
@@ -431,8 +477,7 @@ if __name__ == "__main__":
     log = crocoddyl.CallbackLogger()
     solver.setCallbacks([log, crocoddyl.CallbackVerbose()])
     t0 = time.time()
-    solver.solve([x_init] * (problem.T + 1), [u_init] * problem.T,
-                 5)  # x init, u init, max iteration
+    solver.solve([x_init] * (problem.T + 1), [u_init] * problem.T, 5)  # x init, u init, max iteration
     print('Time of iteration consumed', time.time() - t0)
     plotComMotion(solver.xs, solver.us)
 
