@@ -8,7 +8,8 @@ import pinocchio
 
 from util import rotx, roty, rotz, rotRollPitchYaw
 from math import sqrt
-from ResidualControlClass import ControlResidual
+from ResidualControlBoundClass import ControlBoundResidual
+from ResidualAsymmetricFrictionConeClass import AsymmetricFrictionConeResidual
 
 
 class DifferentialActionModelVariableHeightPendulum(
@@ -19,11 +20,6 @@ class DifferentialActionModelVariableHeightPendulum(
 
         self._m = pinocchio.computeTotalMass(self.state.pinocchio)
         self._g = abs(self.state.pinocchio.gravity.linear[2])
-        self.contacts = crocoddyl.ContactModelMultiple(state, 8)
-        self.contacts.addContact(
-            "single",
-            crocoddyl.ContactModel3D(
-                state, crocoddyl.FrameTranslation(0, np.zeros(3)), 8))
         self.costs = costs
         foot_size = [0.2, 0.1, 0]
         self.Vs = np.array([[1, 1, 1], [-1, 1, 1], [-1, -1, 1],
@@ -68,11 +64,6 @@ class DifferentialActionModelVariableHeightPendulum(
         cdotdot_z = f_z / self._m - self._g
         data.xout = np.array([cdotdot_x, cdotdot_y, cdotdot_z]).T
 
-        # compute the cost residual
-        data.contacts.contacts["single"].f.linear = np.array([
-            f_z * (c_x - u_x) / (c_z - u_z), f_z * (c_y - u_y) / (c_z - u_z),
-            f_z
-        ])
         self.costs.calc(data.costs, x, u)
         data.cost = data.costs.cost
 
@@ -123,23 +114,6 @@ class DifferentialActionModelVariableHeightPendulum(
                             [0.0, left_vertex_1[2]-right_vertex_4[2], left_vertex_2[2]-right_vertex_4[2], left_vertex_3[2]-right_vertex_4[2], left_vertex_4[2]-right_vertex_4[2],
                              right_vertex_1[2]-right_vertex_4[2], right_vertex_2[2]-right_vertex_4[2], right_vertex_3[2]-right_vertex_4[2]]])  # 4*8
         data.Fu[:, :] = df_dtau.dot(dtau_du)
-
-        data.contacts.contacts["single"].df_dx[:, :] = \
-            np.array([[f_z / (c_z - u_z), 0.0, -f_z * (c_x - u_x) / ((c_z - u_z) ** 2), 0.0, 0.0, 0.0],
-                      [0.0, f_z / (c_z - u_z), -f_z * (c_y - u_y) / ((c_z - u_z) ** 2), 0.0, 0.0, 0.0],
-                      [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
-
-        # needs to be modified
-        # data.contacts.contacts["single"].df_du[:, :] = np.array([[(c_x - u_x) / (c_z - u_z), -f_z / (c_z - u_z), 0.0, f_z * (c_x - u_x) / ((c_z - u_z)**2)],
-        #                                                          [(c_y - u_y) / (c_z - u_z), 0.0, -f_z / (c_z - u_z), f_z * (c_y - u_y) / ((c_z - u_z)**2)],
-
-        contact_df_dtau = np.array(
-            [[(c_x - u_x) / (c_z - u_z), -f_z / (c_z - u_z), 0.0, f_z * (c_x - u_x) / ((c_z - u_z) ** 2)],
-             [(c_y - u_y) / (c_z - u_z), 0.0, -f_z / (c_z - u_z), f_z * (c_y - u_y) / ((c_z - u_z) ** 2)],
-             [1.0, 0.0, 0.0, 0.0]])
-        # contact_dtau_du =
-        data.contacts.contacts["single"].df_du[:, :] = contact_df_dtau.dot(dtau_du)
-
         self.costs.calcDiff(data.costs, x, u)
 
     def createData(self):
@@ -150,12 +124,8 @@ class DifferentialActionDataVariableHeightPendulum(
     crocoddyl.DifferentialActionDataAbstract):
     def __init__(self, model):
         crocoddyl.DifferentialActionDataAbstract.__init__(self, model)
-        self.pinocchio = model.state.pinocchio.createData()
-        self.contacts = model.contacts.createData(self.pinocchio)
-        # self.pos =
-        self.multibody = crocoddyl.DataCollectorMultibodyInContact(
-            self.pinocchio, self.contacts)
-        self.costs = model.costs.createData(self.multibody)
+        shared_data = crocoddyl.DataCollectorAbstract()
+        self.costs = model.costs.createData(shared_data)
         self.costs.shareMemory(self)
 
 def buildSRBMFromRobot(robot_model):
@@ -227,7 +197,6 @@ def createPhaseModel(robot_model,
                      foot_ori,
                      support=0,
                      xref=np.array([0.0, 0.0, 0.86, 0.1, 0.0, 0.0]),
-                     nsurf=np.array([0., 0., 1.]).T,
                      mu=0.7,
                      Wx=np.array([0., 0., 10., 10., 10., 10.]),
                      Wu=np.array([50., 1., 1., 1., 1., 1., 1., 1.]),
@@ -282,16 +251,6 @@ def createPhaseModel(robot_model,
                          crocoddyl.CostModelResidual(
                              state, crocoddyl.ResidualModelControl(state, 8)),
                          wureg)  ## ||u||^2
-    # --------------- Friction Cone Constraint ------------------ #
-    cone = crocoddyl.FrictionCone(np.eye(3), Mu)
-    runningCosts.addCost(
-        "frictionPenalization",
-        crocoddyl.CostModelResidual(
-            multibody_state,
-            crocoddyl.ActivationModelQuadraticBarrier(
-                crocoddyl.ActivationBounds(cone.lb, cone.ub)),
-            crocoddyl.ResidualModelContactFrictionCone(multibody_state, 0,
-                                                       cone, 8)), 1e2) #
     # --------------- Control Residual Constraint ------------------ #
     lb_dr = np.array([0.])
     ub_dr = np.array([1.])
@@ -301,7 +260,22 @@ def createPhaseModel(robot_model,
             state,
             crocoddyl.ActivationModelQuadraticBarrier(
                 crocoddyl.ActivationBounds(lb_dr, ub_dr)),
-            ControlResidual(state, 8)), 1e2)
+            ControlBoundResidual(state, 8)), 1e2)
+
+    # --------------- Asymmetric Friction Cone Constraint ------------------ #
+    friction_x_p, friction_x_n, friction_y_p, friction_y_n = get_friction_rays(foot_ori, Mu)
+    lb_rf = np.array([-np.inf, -np.inf, -np.inf, -np.inf])
+    ub_rf = np.array([0., 0., 0., 0.])
+    Afcr = AsymmetricFrictionConeResidual(state, 8)
+    Afcr.get_foothold(foot_pos,foot_ori)
+    Afcr.getCone(friction_x_p, friction_x_n, friction_y_p, friction_y_n)
+    runningCosts.addCost(
+        "Asymmetric Constraint",
+        crocoddyl.CostModelResidual(
+            state,
+            crocoddyl.ActivationModelQuadraticBarrier(
+                crocoddyl.ActivationBounds(lb_rf, ub_rf)),
+            Afcr), 1e2)
 
     model = DifferentialActionModelVariableHeightPendulum(
         multibody_state, runningCosts)

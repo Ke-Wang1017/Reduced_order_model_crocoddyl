@@ -2,12 +2,10 @@ import crocoddyl
 import example_robot_data
 import numpy as np
 
-from variable_height_analytical_3D_CoP_VertexPoint import DifferentialActionModelVariableHeightPendulum, \
-    buildSRBMFromRobot
-from ResidualControlClass import ControlResidual
-
-
-# import pinocchio
+from variable_height_analytical_3D_CoP_VertexPoint_CombinedFriction import DifferentialActionModelVariableHeightPendulum, \
+    buildSRBMFromRobot, get_friction_rays
+from ResidualControlBoundClass import ControlBoundResidual
+from ResidualAsymmetricFrictionConeClass import AsymmetricFrictionConeResidual
 
 class NumDiffException(Exception):
     """Raised when the NumDiff values are too high"""
@@ -73,15 +71,30 @@ runningCosts.addCost("uReg",
                      crocoddyl.CostModelResidual(
                          state, crocoddyl.ResidualModelControl(state, 8)),
                      wutrack)  ## ||u||^2
-cone = crocoddyl.FrictionCone(np.eye(3), Mu)
+
+# --------------- Asymmetric Friction Cone Constraint ------------------ #
+friction_x_p, friction_x_n, friction_y_p, friction_y_n = get_friction_rays(foot_ori, Mu)
+lb_rf = np.array([-np.inf, -np.inf, -np.inf, -np.inf])
+ub_rf = np.array([0., 0., 0., 0.])
+Afcr = AsymmetricFrictionConeResidual(state, 8)
+Afcr.get_foothold(foot_pos, foot_ori)
+Afcr.getCone(friction_x_p, friction_x_n, friction_y_p, friction_y_n)
 runningCosts.addCost(
-    "frictionPenalization",
+    "Asymmetric Constraint",
     crocoddyl.CostModelResidual(
-        multibody_state,
+        state,
         crocoddyl.ActivationModelQuadraticBarrier(
-            crocoddyl.ActivationBounds(cone.lb, cone.ub)),
-        crocoddyl.ResidualModelContactFrictionCone(multibody_state, 0,
-                                                   cone, 8)), 1e2)
+            crocoddyl.ActivationBounds(lb_rf, ub_rf)),
+        Afcr), 1e2)
+# cone = crocoddyl.FrictionCone(np.eye(3), Mu)
+# runningCosts.addCost(
+#     "frictionPenalization",
+#     crocoddyl.CostModelResidual(
+#         multibody_state,
+#         crocoddyl.ActivationModelQuadraticBarrier(
+#             crocoddyl.ActivationBounds(cone.lb, cone.ub)),
+#         crocoddyl.ResidualModelContactFrictionCone(multibody_state, 0,
+#                                                    cone, 8)), 1e2)
 lb_dr = np.array([0.])
 ub_dr = np.array([1.])
 runningCosts.addCost(
@@ -90,7 +103,7 @@ runningCosts.addCost(
         state,
         crocoddyl.ActivationModelQuadraticBarrier(
             crocoddyl.ActivationBounds(lb_dr, ub_dr)),
-        ControlResidual(state, 8)), 1e2)
+        ControlBoundResidual(state, 8)), 1e2)
 model = DifferentialActionModelVariableHeightPendulum(multibody_state, runningCosts)
 data = model.createData()
 model.get_foothold(foot_pos, foot_ori)

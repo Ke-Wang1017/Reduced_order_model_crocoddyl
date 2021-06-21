@@ -1,7 +1,7 @@
 import crocoddyl
 
 
-class ControlResidual(crocoddyl.ResidualModelAbstract):
+class ControlBoundResidual(crocoddyl.ResidualModelAbstract):
     def __init__(self, state, nu):
         crocoddyl.ResidualModelAbstract.__init__(self, state, 1, nu)
 
