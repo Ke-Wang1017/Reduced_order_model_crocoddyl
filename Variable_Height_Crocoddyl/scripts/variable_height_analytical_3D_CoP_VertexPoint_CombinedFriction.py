@@ -275,7 +275,7 @@ def createPhaseModel(robot_model,
             state,
             crocoddyl.ActivationModelQuadraticBarrier(
                 crocoddyl.ActivationBounds(lb_rf, ub_rf)),
-            Afcr), 1e2)
+            Afcr), 5)
 
     model = DifferentialActionModelVariableHeightPendulum(
         multibody_state, runningCosts)
