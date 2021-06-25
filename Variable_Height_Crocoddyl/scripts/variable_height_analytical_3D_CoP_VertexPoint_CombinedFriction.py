@@ -16,7 +16,7 @@ class DifferentialActionModelVariableHeightPendulum(
     crocoddyl.DifferentialActionModelAbstract):
     def __init__(self, state, costs):
         crocoddyl.DifferentialActionModelAbstract.__init__(
-            self, state, 8)  # nu = 9: f_z, vertex points(8)
+            self, state, 8)  # nu = 8: f_z, vertex points(7)
 
         self._m = pinocchio.computeTotalMass(self.state.pinocchio)
         self._g = abs(self.state.pinocchio.gravity.linear[2])
@@ -55,7 +55,7 @@ class DifferentialActionModelVariableHeightPendulum(
         return cop
 
     def calc(self, data, x, u):
-        c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x  # how do you know cdot is the diff of c? implicit written in the source code of crocoddyl
+        c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x
         f_z = u.item(0)
         [u_x, u_y, u_z] = self.compute_cop_from_vertex(u)
 
@@ -93,10 +93,10 @@ class DifferentialActionModelVariableHeightPendulum(
                 f_z / ((c_z - u_z) * self._m), 0.0,
                 -f_z * (c_x - u_x) / ((c_z - u_z) ** 2 * self._m), 0.0, 0.0, 0.0
             ],
-                [
-                    0.0, f_z / ((c_z - u_z) * self._m),
-                         -f_z * (c_y - u_y) / ((c_z - u_z) ** 2 * self._m), 0.0, 0.0, 0.0
-                ], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+            [
+                0.0, f_z / ((c_z - u_z) * self._m),
+                     -f_z * (c_y - u_y) / ((c_z - u_z) ** 2 * self._m), 0.0, 0.0, 0.0
+            ], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
 
         df_dtau = np.array(
             [[(c_x - u_x) / (self._m * (c_z - u_z)),
@@ -146,7 +146,7 @@ def buildSRBMFromRobot(robot_model):
     return model
 
 
-def get_friction_rays(ori, mu):
+def compute_friction_rays(ori, mu):
     x_p = np.array([mu / (sqrt(mu ** 2 + 1)), 0, 1 / (sqrt(mu ** 2 + 1))])
     x_n = np.array([-mu / (sqrt(mu ** 2 + 1)), 0, 1 / (sqrt(mu ** 2 + 1))])
     y_p = np.array([0, mu / (sqrt(mu ** 2 + 1)), 1 / (sqrt(mu ** 2 + 1))])
@@ -263,7 +263,7 @@ def createPhaseModel(robot_model,
             ControlBoundResidual(state, 8)), 1e2)
 
     # --------------- Asymmetric Friction Cone Constraint ------------------ #
-    friction_x_p, friction_x_n, friction_y_p, friction_y_n = get_friction_rays(foot_ori, Mu)
+    friction_x_p, friction_x_n, friction_y_p, friction_y_n = compute_friction_rays(foot_ori, Mu)
     lb_rf = np.array([-np.inf, -np.inf, -np.inf, -np.inf])
     ub_rf = np.array([0., 0., 0., 0.])
     Afcr = AsymmetricFrictionConeResidual(state, 8)
@@ -322,7 +322,6 @@ def plotComMotion(xs, us):
 
 
 if __name__ == "__main__":
-
     foot_holds = np.array([[0.0, 0.0, 0.0], [0.0, -0.085, 0.05], [0.05, 0.0, 0.05],
                            [0.1, 0.085, 0.1], [0.1, 0.0, 0.1]]) # footsteps given
     phase = np.array([0, 1, 0, -1, 0])  # 0: double, 1: left, -1: right
