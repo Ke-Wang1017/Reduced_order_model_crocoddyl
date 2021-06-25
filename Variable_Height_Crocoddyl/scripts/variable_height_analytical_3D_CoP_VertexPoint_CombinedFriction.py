@@ -331,8 +331,8 @@ if __name__ == "__main__":
     ################ Foot Placement #############################################
     foot_placements = np.zeros((len_steps, 6)) # :3, left support. 3:, right support
     foot_orientations = np.zeros((len_steps, 6))
-    foot_orientations[1:, 0] = np.deg2rad(-15)
-    foot_orientations[1:, 3] = np.deg2rad(15)
+    foot_orientations[1:, 0] = np.deg2rad(15)
+    foot_orientations[1:, 3] = np.deg2rad(-15)
     ######### Should not do this, directly generate footplacements instead generating from CoP #################
     for i in range(len_steps):
         if phase[i] == 0:
