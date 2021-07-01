@@ -2,7 +2,7 @@ import crocoddyl
 import numpy as np
 from math import sqrt
 from util import rotRollPitchYaw
-from VertexClass import Vertex
+from ContactVertexClass_backup import Vertex
 
 class AsymmetricFrictionConeResidual(crocoddyl.ResidualModelAbstract):
     def __init__(self, state, nu, vertex, ori, mu):
