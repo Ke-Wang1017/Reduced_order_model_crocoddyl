@@ -10,7 +10,7 @@ from util import rotRollPitchYaw
 from math import sqrt
 from ResidualControlBoundClass import ControlBoundResidual
 from ResidualAsymmetricFrictionConeClass import AsymmetricFrictionConeResidual
-from ContactVertexClass_backup import Vertex
+from ActuationModelBipedContactVertex import ActuationModelBipedContactVertex
 
 
 class DifferentialActionModelVariableHeightPendulum(
