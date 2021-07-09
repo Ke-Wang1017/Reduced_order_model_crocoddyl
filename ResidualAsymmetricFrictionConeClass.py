@@ -5,13 +5,14 @@ from util import rotRollPitchYaw
 from ContactVertexClass_backup import Vertex
 
 class AsymmetricFrictionConeResidual(crocoddyl.ResidualModelAbstract):
-    def __init__(self, state, nu, vertex, ori, mu):
+    def __init__(self, state, nu, ori, mu, vertex, vertex_data):
         crocoddyl.ResidualModelAbstract.__init__(self, state, 4, nu)
         self.friction_x_p = np.zeros(3)
         self.friction_x_n = np.zeros(3)
         self.friction_y_p = np.zeros(3)
         self.friction_y_n = np.zeros(3)
         self.vertex = vertex
+        self.vertex_data = vertex_data
         self.ori = ori
         self.mu = mu
         self.p = np.zeros(3)
@@ -53,7 +54,7 @@ class AsymmetricFrictionConeResidual(crocoddyl.ResidualModelAbstract):
 
     def calc(self, data, x, u):
         c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x
-        self.p = self.vertex.cal_cop_from_vertex_humanoid(u)
+        self.p = self.vertex.cal(self.vertex_data, u)
         [u_x, u_y, u_z] = self.p
         force = np.array([(c_x-u_x)/(c_z-u_z), (c_y-u_y)/(c_z-u_z), 1.0])
         data.r[:] = -np.array([self.friction_x_p.dot(force), self.friction_x_n.dot(force), self.friction_y_p.dot(force),\
@@ -75,8 +76,7 @@ class AsymmetricFrictionConeResidual(crocoddyl.ResidualModelAbstract):
                        [0, -self.friction_y_p[0]/(c_z-u_z), -self.friction_y_p[1]/(c_z-u_z), self.friction_y_p[0]*(c_x-u_x)/((c_z-u_z)**2)+self.friction_y_p[1]*(c_y-u_y)/((c_z-u_z)**2)],
                        [0, -self.friction_y_n[0]/(c_z-u_z), -self.friction_y_n[1]/(c_z-u_z), self.friction_y_n[0]*(c_x-u_x)/((c_z-u_z)**2)+self.friction_y_n[1]*(c_y-u_y)/((c_z-u_z)**2)]])
 
-        dtau_du = self.vertex.caldiff_cop()
-        data.Ru = dr_dtau.dot(dtau_du)
+        data.Ru = dr_dtau.dot(self.vertex_data.dtau_du)
 
     def createData(self, collector):
         data = crocoddyl.ResidualDataAbstract(self, collector)

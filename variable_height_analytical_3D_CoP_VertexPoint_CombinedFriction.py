@@ -7,7 +7,6 @@ import numpy as np
 import pinocchio
 
 from util import rotRollPitchYaw
-from math import sqrt
 from ResidualControlBoundClass import ControlBoundResidual
 from ResidualAsymmetricFrictionConeClass import AsymmetricFrictionConeResidual
 from ActuationModelBipedContactVertex import ActuationModelBipedContactVertex
@@ -15,18 +14,17 @@ from ActuationModelBipedContactVertex import ActuationModelBipedContactVertex
 
 class DifferentialActionModelVariableHeightPendulum(
     crocoddyl.DifferentialActionModelAbstract):
-    def __init__(self, state, costs, vertex): # pass vertex class
+    def __init__(self, state, costs, vertex, vertex_data): # pass vertex class
         crocoddyl.DifferentialActionModelAbstract.__init__(
             self, state, 8)  # cannot overwrite the function, nu = 8: f_z, vertex points(7)
 
         self._m = pinocchio.computeTotalMass(self.state.pinocchio)
         self._g = abs(self.state.pinocchio.gravity.linear[2])
         self.costs = costs
-        self.vertex = vertex
+        self.vertex = vertex # need to update vertex and create data
+        self.vertex_data = vertex_data
         self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         self.u_ub = np.array([2.0 * self._m * self._g, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
-        self.foot_pos = np.zeros(6)
-        self.foot_ori = np.zeros(6)
 
     def get_support_index(self, support_index):
         if support_index == 1:  # left support
@@ -40,7 +38,7 @@ class DifferentialActionModelVariableHeightPendulum(
         c_x, c_y, c_z, cdot_x, cdot_y, cdot_z = x
         f_z = u.item(0)
         # self.compute_cop_from_vertex(data, u)
-        data.p = self.vertex.cal_cop_from_vertex_humanoid(u)
+        data.p = self.vertex.calc(self.vertex_data, u)
         [u_x, u_y, u_z] = data.p
 
         cdotdot_x = f_z * (c_x - u_x) / ((c_z - u_z) * self._m)
@@ -75,8 +73,7 @@ class DifferentialActionModelVariableHeightPendulum(
               self._m * f_z * (c_y - u_y) / ((c_z - u_z) * self._m) ** 2],
              [1.0 / self._m, 0., 0., 0.]])  # needs to be modified
 
-        dtau_du = self.vertex.caldiff_cop()
-        data.Fu[:, :] = df_dtau.dot(dtau_du)
+        data.Fu[:, :] = df_dtau.dot(self.vertex_data.dtau_du)
         self.costs.calcDiff(data.costs, x, u)
 
     def createData(self):
@@ -91,6 +88,7 @@ class DifferentialActionDataVariableHeightPendulum(
         self.costs = model.costs.createData(shared_data)
         self.costs.shareMemory(self)
         self.p = np.zeros(3)
+
 
 def buildSRBMFromRobot(robot_model):
     model = pinocchio.Model()
@@ -108,6 +106,24 @@ def buildSRBMFromRobot(robot_model):
     body_placement.translation[2] = com[2]
     model.appendBodyToJoint(joint_com, body_inertia, body_placement)
     return model
+
+def generateVertexSet(foot_pos, foot_ori, foot_size):
+    Vs = np.array([[1, 1, 1], [-1, 1, 1], [-1, -1, 1],
+                        [1, -1, 1]]) * foot_size / 2  # distance of 4 vertexes from the center of foot
+    vertex_set = np.zeros((8, 3))
+    lfoot_pos = foot_pos[:3]
+    rfoot_pos = foot_pos[3:]
+    lfoot_ori = foot_ori[:3]
+    rfoot_ori = foot_ori[3:]
+    vertex_set[0,:] = lfoot_pos + rotRollPitchYaw(lfoot_ori[0], lfoot_ori[1], lfoot_ori[2]).dot(Vs[0, :])
+    vertex_set[1,:] = lfoot_pos + rotRollPitchYaw(lfoot_ori[0], lfoot_ori[1], lfoot_ori[2]).dot(Vs[1, :])
+    vertex_set[2,:] = lfoot_pos + rotRollPitchYaw(lfoot_ori[0], lfoot_ori[1], lfoot_ori[2]).dot(Vs[2, :])
+    vertex_set[3,:] = lfoot_pos + rotRollPitchYaw(lfoot_ori[0], lfoot_ori[1], lfoot_ori[2]).dot(Vs[3, :])
+    vertex_set[4,:] = rfoot_pos + rotRollPitchYaw(rfoot_ori[0], rfoot_ori[1], rfoot_ori[2]).dot(Vs[0, :])
+    vertex_set[5,:] = rfoot_pos + rotRollPitchYaw(rfoot_ori[0], rfoot_ori[1], rfoot_ori[2]).dot(Vs[1, :])
+    vertex_set[6,:] = rfoot_pos + rotRollPitchYaw(rfoot_ori[0], rfoot_ori[1], rfoot_ori[2]).dot(Vs[2, :])
+    vertex_set[7,:] = rfoot_pos + rotRollPitchYaw(rfoot_ori[0], rfoot_ori[1], rfoot_ori[2]).dot(Vs[3, :])
+    return vertex_set
 
 
 # add constraints for sum of weight
@@ -130,7 +146,10 @@ def createPhaseModel(robot_model,
     model = buildSRBMFromRobot(robot_model)
     multibody_state = crocoddyl.StateMultibody(model)
     runningCosts = crocoddyl.CostModelSum(state, 8)
-    vertex = Vertex(foot_size, foot_pos[:3], foot_pos[3:], foot_ori[:3], foot_ori[3:])
+    biped_vertexes = ActuationModelBipedContactVertex(state)
+    vertex_set = generateVertexSet(foot_pos, foot_ori, foot_size)
+    biped_vertexes.set_reference(vertex_set)
+    biped_vertexes_data = biped_vertexes.createData()
     if support == 1: # Left support
         uRef = np.hstack(
             [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.25, 0.25, 0.25, 0.25, 0.0, 0.0, 0.0])
@@ -187,7 +206,7 @@ def createPhaseModel(robot_model,
     # --------------- Asymmetric Friction Cone Constraint ------------------ #
     lb_rf = np.array([-np.inf, -np.inf, -np.inf, -np.inf])
     ub_rf = np.array([0., 0., 0., 0.])
-    Afcr = AsymmetricFrictionConeResidual(state, 8, vertex, foot_ori, Mu)
+    Afcr = AsymmetricFrictionConeResidual(state, 8, foot_ori, Mu, biped_vertexes, biped_vertexes_data)
     runningCosts.addCost(
         "Asymmetric Constraint",
         crocoddyl.CostModelResidual(
@@ -196,7 +215,7 @@ def createPhaseModel(robot_model,
                 crocoddyl.ActivationBounds(lb_rf, ub_rf)),
             Afcr), 5)
 
-    model = DifferentialActionModelVariableHeightPendulum(multibody_state, runningCosts, vertex)
+    model = DifferentialActionModelVariableHeightPendulum(multibody_state, runningCosts, biped_vertexes, biped_vertexes_data)
     model.get_support_index(support)
     return crocoddyl.IntegratedActionModelEuler(model, dt)
 
