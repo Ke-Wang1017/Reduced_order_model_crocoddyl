@@ -51,6 +51,8 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
         self.actuation.calcDiff(data.actuation, x, u)
         # Derivatives of dynamics
         f_z = u[0]
+        data.Fx = np.zeros((3,6))
+        data.Fu = np.zeros((3,8))
         data.Fx[0, 0] = f_z / data.hm
         data.Fx[0, 2] = -f_z * data.p[0] / (data.hm * data.p[2])
         data.Fx[1, 1:3] = [f_z / data.hm, -f_z * data.p[1] / (data.hm * data.p[2])]
@@ -377,8 +379,8 @@ if __name__ == "__main__":
     u_init = np.array([931.95, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125])
     x_init = np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0])
     problem = crocoddyl.ShootingProblem(x_init, locoModel, mT)
-    print(problem.nthreads)
-    problem.nthreads = 1
+    # print(problem.nthreads)
+    # problem.nthreads = 1
     solver = crocoddyl.SolverBoxFDDP(problem)
     log = crocoddyl.CallbackLogger()
     solver.setCallbacks([log, crocoddyl.CallbackVerbose()])
