@@ -203,14 +203,14 @@ def createPhaseModel(robot_model,
     # --------------- Asymmetric Friction Cone Constraint ------------------ #
     lb_rf = np.array([-np.inf, -np.inf, -np.inf, -np.inf])
     ub_rf = np.array([0., 0., 0., 0.])
-    # Afcr = AsymmetricFrictionConeResidual(state, 8, foot_ori, Mu, actuation, actuation_data)
-    # runningCosts.addCost(
-    #     "Asymmetric Constraint",
-    #     crocoddyl.CostModelResidual(
-    #         state,
-    #         crocoddyl.ActivationModelQuadraticBarrier(
-    #             crocoddyl.ActivationBounds(lb_rf, ub_rf)),
-    #         Afcr), 5)
+    Afcr = AsymmetricFrictionConeResidual(state, 8, foot_ori, Mu, actuation)
+    runningCosts.addCost(
+        "Asymmetric Constraint",
+        crocoddyl.CostModelResidual(
+            state,
+            crocoddyl.ActivationModelQuadraticBarrier(
+                crocoddyl.ActivationBounds(lb_rf, ub_rf)),
+            Afcr), 5)
 
     model = DifferentialActionModelVariableHeightPendulum(multibody_state, runningCosts, actuation)
     model.get_support_index(support)
