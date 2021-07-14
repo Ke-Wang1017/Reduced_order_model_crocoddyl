@@ -8,7 +8,7 @@ import pinocchio
 
 from util import rotRollPitchYaw
 from ResidualControlBoundClass import ControlBoundResidual
-from ResidualAsymmetricFrictionConeClass import AsymmetricFrictionConeResidual
+from ResidualAsymmetricFrictionConeClass import AsymmetricCone, AsymmetricFrictionConeResidual
 from ActuationModelBipedContactVertex import ActuationModelBipedContactVertex
 
 
@@ -202,7 +202,7 @@ def createPhaseModel(robot_model,
     # --------------- Asymmetric Friction Cone Constraint ------------------ #
     lb_rf = np.array([-np.inf, -np.inf, -np.inf, -np.inf])
     ub_rf = np.array([0., 0., 0., 0.])
-    Afcr = AsymmetricFrictionConeResidual(state, 8, foot_ori, Mu)
+    Afcr = AsymmetricFrictionConeResidual(state, 8, AsymmetricCone(Mu, foot_ori))
     runningCosts.addCost(
         "Asymmetric Constraint",
         crocoddyl.CostModelResidual(

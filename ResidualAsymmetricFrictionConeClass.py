@@ -4,71 +4,81 @@ from math import sqrt
 from util import rotRollPitchYaw
 
 
-class AsymmetricFrictionConeResidual(crocoddyl.ResidualModelAbstract):
-    def __init__(self, state, nu, ori, mu):
-        crocoddyl.ResidualModelAbstract.__init__(self, state, 4, nu, True, False, True)
-        self.friction_x_p = np.zeros(3)
-        self.friction_x_n = np.zeros(3)
-        self.friction_y_p = np.zeros(3)
-        self.friction_y_n = np.zeros(3)
-        self.ori = ori
+class AsymmetricCone:
+    def __init__(self, mu, ori):
         self.mu = mu
-        self.compute_friction_cones()
+        self.ori = ori
+        self._updateCone()
+        self.xp = np.zeros(3)
+        self.xn = np.zeros(3)
+        self.yp = np.zeros(3)
+        self.xn = np.zeros(3)
 
-    def compute_friction_cones(self):
-        x_p = np.array([self.mu / (sqrt(self.mu ** 2 + 1)), 0, 1 / (sqrt(self.mu ** 2 + 1))])
-        x_n = np.array([-self.mu / (sqrt(self.mu ** 2 + 1)), 0, 1 / (sqrt(self.mu ** 2 + 1))])
-        y_p = np.array([0, self.mu / (sqrt(self.mu ** 2 + 1)), 1 / (sqrt(self.mu ** 2 + 1))])
-        y_n = np.array([0, -self.mu / (sqrt(self.mu ** 2 + 1)), 1 / (sqrt(self.mu ** 2 + 1))])
-        R_L = rotRollPitchYaw(self.ori[0], self.ori[1], self.ori[2])
-        R_R = rotRollPitchYaw(self.ori[3], self.ori[4], self.ori[5])
-        x_p_l = R_L.dot(x_p)
-        x_n_l = R_L.dot(x_n)
-        y_p_l = R_L.dot(y_p)
-        y_n_l = R_L.dot(y_n)
+    def set_cone(self, mu, ori):
+        self.mu = mu
+        self.ori = ori
+        self._updateCone()
 
-        x_p_r = R_R.dot(x_p)
-        x_n_r = R_R.dot(x_n)
-        y_p_r = R_R.dot(y_p)
-        y_n_r = R_R.dot(y_n)
+    def _updateCone(self):
+        xp = np.array([self.mu / (sqrt(self.mu ** 2 + 1)), 0, 1 / (sqrt(self.mu ** 2 + 1))])
+        xn = np.array([-self.mu / (sqrt(self.mu ** 2 + 1)), 0, 1 / (sqrt(self.mu ** 2 + 1))])
+        yp = np.array([0, self.mu / (sqrt(self.mu ** 2 + 1)), 1 / (sqrt(self.mu ** 2 + 1))])
+        yn = np.array([0, -self.mu / (sqrt(self.mu ** 2 + 1)), 1 / (sqrt(self.mu ** 2 + 1))])
 
-        if x_p_r[2] > x_p_l[2]:
-            self.friction_x_p = x_p_l
+        R_l = rotRollPitchYaw(self.ori[0], self.ori[1], self.ori[2])
+        R_r = rotRollPitchYaw(self.ori[3], self.ori[4], self.ori[5])
+        xp_l = R_l.dot(xp)
+        xn_l = R_l.dot(xn)
+        yp_l = R_l.dot(yp)
+        yn_l = R_l.dot(yn)
+
+        xp_r = R_r.dot(xp)
+        xn_r = R_r.dot(xn)
+        yp_r = R_r.dot(yp)
+        yn_r = R_r.dot(yn)
+
+        if xp_r[2] > xp_l[2]:
+            self.xp = xp_l
         else:
-            self.friction_x_p = x_p_r
-        if x_n_r[2] > x_n_l[2]:
-            self.friction_x_n = x_n_l
+            self.xp = xp_r
+        if xn_r[2] > xn_l[2]:
+            self.xn = xn_l
         else:
-            self.friction_x_n = x_n_r
-        if y_p_r[2] > y_p_l[2]:
-            self.friction_y_p = y_p_l
+            self.xn = xn_r
+        if yp_r[2] > yp_l[2]:
+            self.yp = yp_l
         else:
-            self.friction_y_p = y_p_r
-        if y_n_r[2] > y_n_l[2]:
-            self.friction_y_n = y_n_l
+            self.yp = yp_r
+        if yn_r[2] > yn_l[2]:
+            self.yn = yn_l
         else:
-            self.friction_y_n = y_n_r
+            self.yn = yn_r
+
+class AsymmetricFrictionConeResidual(crocoddyl.ResidualModelAbstract):
+    def __init__(self, state, nu, cone):
+        crocoddyl.ResidualModelAbstract.__init__(self, state, 4, nu, True, False, True)
+        self.cone = cone
 
     def calc(self, data, x, u):
         data.p[:] = x[:3] - data.shared.actuation.tau
         data.f[0] = data.p[0] / data.p[2]
         data.f[1] = data.p[1] / data.p[2]
-        data.r[0] = -self.friction_x_p.dot(data.f)
-        data.r[1] = -self.friction_x_n.dot(data.f)
-        data.r[2] = -self.friction_y_p.dot(data.f)
-        data.r[3] = -self.friction_y_n.dot(data.f)
+        data.r[0] = -self.cone.xp.dot(data.f)
+        data.r[1] = -self.cone.xn.dot(data.f)
+        data.r[2] = -self.cone.yp.dot(data.f)
+        data.r[3] = -self.cone.yn.dot(data.f)
 
     def calcDiff(self, data, x, u):
         data.Rx[:, :3] = \
-            -np.array([[self.friction_x_p[0] / data.p[2], self.friction_x_p[1] / data.p[2], -self.friction_x_p[0] * data.p[0] / (data.p[2]**2) - self.friction_x_p[1] * data.p[1] / (data.p[2])**2],
-                       [self.friction_x_n[0] / data.p[2], self.friction_x_n[1] / data.p[2], -self.friction_x_n[0] * data.p[0] / (data.p[2]**2) - self.friction_x_n[1] * data.p[1] / (data.p[2])**2],
-                       [self.friction_y_p[0] / data.p[2], self.friction_y_p[1] / data.p[2], -self.friction_y_p[0] * data.p[0] / (data.p[2]**2) - self.friction_y_p[1] * data.p[1] / (data.p[2])**2],
-                       [self.friction_y_n[0] / data.p[2], self.friction_y_n[1] / data.p[2], -self.friction_y_n[0] * data.p[0] / (data.p[2]**2) - self.friction_y_n[1] * data.p[1] / (data.p[2])**2]])
+            -np.array([[self.cone.xp[0] / data.p[2], self.cone.xp[1] / data.p[2], -self.cone.xp[0] * data.p[0] / (data.p[2]**2) - self.cone.xp[1] * data.p[1] / (data.p[2])**2],
+                       [self.cone.xn[0] / data.p[2], self.cone.xn[1] / data.p[2], -self.cone.xn[0] * data.p[0] / (data.p[2]**2) - self.cone.xn[1] * data.p[1] / (data.p[2])**2],
+                       [self.cone.yp[0] / data.p[2], self.cone.yp[1] / data.p[2], -self.cone.yp[0] * data.p[0] / (data.p[2]**2) - self.cone.yp[1] * data.p[1] / (data.p[2])**2],
+                       [self.cone.yn[0] / data.p[2], self.cone.yn[1] / data.p[2], -self.cone.yn[0] * data.p[0] / (data.p[2]**2) - self.cone.yn[1] * data.p[1] / (data.p[2])**2]])
         data.dr_dtau[:, :] = \
-            -np.array([[-self.friction_x_p[0] / data.p[2], -self.friction_x_p[1] / data.p[2], self.friction_x_p[0] * data.p[0] / (data.p[2])**2 + self.friction_x_p[1] * data.p[1] / (data.p[2])**2],
-                       [-self.friction_x_n[0] / data.p[2], -self.friction_x_n[1] / data.p[2], self.friction_x_n[0] * data.p[0] / (data.p[2])**2 + self.friction_x_n[1] * data.p[1] / (data.p[2])**2],
-                       [-self.friction_y_p[0] / data.p[2], -self.friction_y_p[1] / data.p[2], self.friction_y_p[0] * data.p[0] / (data.p[2])**2 + self.friction_y_p[1] * data.p[1] / (data.p[2])**2],
-                       [-self.friction_y_n[0] / data.p[2], -self.friction_y_n[1] / data.p[2], self.friction_y_n[0] * data.p[0] / (data.p[2])**2 + self.friction_y_n[1] * data.p[1] / (data.p[2])**2]])
+            -np.array([[-self.cone.xp[0] / data.p[2], -self.cone.xp[1] / data.p[2], self.cone.xp[0] * data.p[0] / (data.p[2])**2 + self.cone.xp[1] * data.p[1] / (data.p[2])**2],
+                       [-self.cone.xn[0] / data.p[2], -self.cone.xn[1] / data.p[2], self.cone.xn[0] * data.p[0] / (data.p[2])**2 + self.cone.xn[1] * data.p[1] / (data.p[2])**2],
+                       [-self.cone.yp[0] / data.p[2], -self.cone.yp[1] / data.p[2], self.cone.yp[0] * data.p[0] / (data.p[2])**2 + self.cone.yp[1] * data.p[1] / (data.p[2])**2],
+                       [-self.cone.yn[0] / data.p[2], -self.cone.yn[1] / data.p[2], self.cone.yn[0] * data.p[0] / (data.p[2])**2 + self.cone.yn[1] * data.p[1] / (data.p[2])**2]])
         data.Ru[:,:] = data.dr_dtau.dot(data.shared.actuation.dtau_du)
 
     def createData(self, collector):
