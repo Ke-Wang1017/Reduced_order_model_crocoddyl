@@ -51,8 +51,7 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
         self.actuation.calcDiff(data.actuation, x, u)
         # Derivatives of dynamics
         f_z = u[0]
-        data.Fx = np.zeros((3,6))
-        data.Fu = np.zeros((3,8))
+
         data.Fx[0, 0] = f_z / data.hm
         data.Fx[0, 2] = -f_z * data.p[0] / (data.hm * data.p[2])
         data.Fx[1, 1:3] = [f_z / data.hm, -f_z * data.p[1] / (data.hm * data.p[2])]
@@ -63,10 +62,10 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
         data.df_dtau[0, 2] = data.az * data.p[0] / data.tmp_hm2
         data.df_dtau[1, 1:3] = [-f_z / data.hm, data.az * data.p[1] / data.tmp_hm2]
 
-        data.Fu[0, 0] = data.p[0] / data.hm
-        data.Fu[1, 0] = data.p[1] / data.hm
-        data.Fu[2, 0] = 1. / self._m
-        data.Fu[:, :] += data.df_dtau.dot(data.actuation.dtau_du)
+        data.Fu[:, :] = data.df_dtau.dot(data.actuation.dtau_du)
+        data.Fu[0, 0] += data.p[0] / data.hm
+        data.Fu[1, 0] += data.p[1] / data.hm
+        data.Fu[2, 0] += 1. / self._m
         # Derivatives of cost functions
         self.costs.calcDiff(data.costs, x, u)
 

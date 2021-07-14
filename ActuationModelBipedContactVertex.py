@@ -26,7 +26,6 @@ class ActuationModelBipedContactVertex(crocoddyl.ActuationModelAbstract):
     def updateJacobians(self, data):
         if self._updateVertexes:
             self._updateVertexes = False
-            data.dtau_du = np.zeros((3,8))
             data.dtau_du[0, 1:] = [self._vs[0, 0] - self._vs[0, -1], self._vs[0, 1] - self._vs[0, -1],
                                    self._vs[0, 2] - self._vs[0, -1], self._vs[0, 3] - self._vs[0, -1],
                                    self._vs[0, 4] - self._vs[0, -1], self._vs[0, 5] - self._vs[0, -1],
