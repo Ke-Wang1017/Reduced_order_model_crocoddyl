@@ -202,7 +202,7 @@ def createPhaseModel(robot_model,
     # --------------- Asymmetric Friction Cone Constraint ------------------ #
     lb_rf = np.array([-np.inf, -np.inf, -np.inf, -np.inf])
     ub_rf = np.array([0., 0., 0., 0.])
-    Afcr = AsymmetricFrictionConeResidual(state, 8, foot_ori, Mu, actuation)
+    Afcr = AsymmetricFrictionConeResidual(state, 8, foot_ori, Mu)
     runningCosts.addCost(
         "Asymmetric Constraint",
         crocoddyl.CostModelResidual(
