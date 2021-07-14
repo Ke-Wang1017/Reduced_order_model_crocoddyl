@@ -81,32 +81,23 @@ def publish_gains(param_name, com_gain):
     rospy.set_param('/' + param_name + '/com_ff_kp', com_gain[2])
 
 
-def publish_all(com_trajectory, support_durations, support_indexes,
-                foot_placements, foot_orientations, swing_height,
+def publish_all(com_trajectory, support_durations, support_indexes, foot_placements, foot_orientations, swing_height,
                 swing_height_offset, com_gain):
     try:
         while not rospy.is_shutdown():
-            publish_com_trajectory(trajectory=com_trajectory,
-                                   param_name='com_trajectory')
-            publish_support_durations(support_durations=support_durations,
-                                      param_name='support_durations')
-            publish_support_end_times(support_durations=support_durations,
-                                      param_name='support_end_times')
-            publish_support_indexes(support_indexes=support_indexes,
-                                    param_name='support_indexes')
-            publish_footplacements(footplacements=foot_placements,
-                                   param_name='foot_placements')
-            publish_footorientations(footorientations=foot_orientations,
-                                     param_name='foot_orientations')
-            publish_swing_height(swing_height=swing_height,
-                                 param_name='swing_height')
-            publish_swing_height_offset(
-                swing_height_offset=swing_height_offset,
-                param_name='swing_height_offset')
+            publish_com_trajectory(trajectory=com_trajectory, param_name='com_trajectory')
+            publish_support_durations(support_durations=support_durations, param_name='support_durations')
+            publish_support_end_times(support_durations=support_durations, param_name='support_end_times')
+            publish_support_indexes(support_indexes=support_indexes, param_name='support_indexes')
+            publish_footplacements(footplacements=foot_placements, param_name='foot_placements')
+            publish_footorientations(footorientations=foot_orientations, param_name='foot_orientations')
+            publish_swing_height(swing_height=swing_height, param_name='swing_height')
+            publish_swing_height_offset(swing_height_offset=swing_height_offset, param_name='swing_height_offset')
             publish_gains(com_gain=com_gain, param_name='com_gain')
             break
     except rospy.ROSInterruptException:
         pass
+
 
 # if __name__ == "__main__":
 # publish_all()

@@ -26,10 +26,11 @@ class AsymmetricFrictionConeResidual(crocoddyl.ResidualModelAbstract):
                        [xn[0] / data.p[2], xn[1] / data.p[2], -xn[0] * data.p[0] / data.tmp_pz2 - xn[1] * data.p[1] / data.tmp_pz2],
                        [yp[0] / data.p[2], yp[1] / data.p[2], -yp[0] * data.p[0] / data.tmp_pz2 - yp[1] * data.p[1] / data.tmp_pz2],
                        [yn[0] / data.p[2], yn[1] / data.p[2], -yn[0] * data.p[0] / data.tmp_pz2 - yn[1] * data.p[1] / data.tmp_pz2]])
-        data.Ru[:,:] = -data.Rx[:, :3].dot(data.shared.actuation.dtau_du)
+        data.Ru[:, :] = -data.Rx[:, :3].dot(data.shared.actuation.dtau_du)
 
     def createData(self, collector):
         return AsymmetricFrictionConeDataResidual(self, collector)
+
 
 class AsymmetricFrictionConeDataResidual(crocoddyl.ResidualDataAbstract):
     def __init__(self, model, collector):
@@ -56,10 +57,10 @@ class AsymmetricCone:
         self._updateCone()
 
     def _updateCone(self):
-        xp = np.array([self.mu / (sqrt(self.mu ** 2 + 1)), 0, 1 / (sqrt(self.mu ** 2 + 1))])
-        xn = np.array([-self.mu / (sqrt(self.mu ** 2 + 1)), 0, 1 / (sqrt(self.mu ** 2 + 1))])
-        yp = np.array([0, self.mu / (sqrt(self.mu ** 2 + 1)), 1 / (sqrt(self.mu ** 2 + 1))])
-        yn = np.array([0, -self.mu / (sqrt(self.mu ** 2 + 1)), 1 / (sqrt(self.mu ** 2 + 1))])
+        xp = np.array([self.mu / (sqrt(self.mu**2 + 1)), 0, 1 / (sqrt(self.mu**2 + 1))])
+        xn = np.array([-self.mu / (sqrt(self.mu**2 + 1)), 0, 1 / (sqrt(self.mu**2 + 1))])
+        yp = np.array([0, self.mu / (sqrt(self.mu**2 + 1)), 1 / (sqrt(self.mu**2 + 1))])
+        yn = np.array([0, -self.mu / (sqrt(self.mu**2 + 1)), 1 / (sqrt(self.mu**2 + 1))])
 
         R_l = rotRollPitchYaw(self.ori[0], self.ori[1], self.ori[2])
         R_r = rotRollPitchYaw(self.ori[3], self.ori[4], self.ori[5])

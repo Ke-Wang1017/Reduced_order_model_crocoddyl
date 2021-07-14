@@ -13,14 +13,14 @@ from ActuationModelBipedContactVertex import ActuationModelBipedContactVertex
 
 
 class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialActionModelAbstract):
-    def __init__(self, state, costs, actuation): # pass vertex class
+    def __init__(self, state, costs, actuation):  # pass vertex class
         crocoddyl.DifferentialActionModelAbstract.__init__(
             self, state, 8)  # cannot overwrite the function, nu = 8: f_z, vertex points(7)
 
         self._m = pinocchio.computeTotalMass(self.state.pinocchio)
         self._g = abs(self.state.pinocchio.gravity.linear[2])
         self.costs = costs
-        self.actuation = actuation # need to update vertex and create data
+        self.actuation = actuation  # need to update vertex and create data
         self.u_lb = np.array([100., 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         self.u_ub = np.array([2.0 * self._m * self._g, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
 
@@ -73,20 +73,18 @@ class DifferentialActionModelVariableHeightPendulum(crocoddyl.DifferentialAction
         return DifferentialActionDataVariableHeightPendulum(self)
 
 
-class DifferentialActionDataVariableHeightPendulum(
-    crocoddyl.DifferentialActionDataAbstract):
+class DifferentialActionDataVariableHeightPendulum(crocoddyl.DifferentialActionDataAbstract):
     def __init__(self, model):
         crocoddyl.DifferentialActionDataAbstract.__init__(self, model)
         self.actuation = model.actuation.createData()
         self.collector = crocoddyl.DataCollectorActuation(self.actuation)
         self.costs = model.costs.createData(self.collector)
         self.costs.shareMemory(self)
-        self.df_dtau = np.zeros((3,3))
-        self.p = np.zeros(3) # difference better CoM and CoP
-        self.hm = 0. # pendulum height times mass
-        self.az = 0. # vertical force times mass
+        self.df_dtau = np.zeros((3, 3))
+        self.p = np.zeros(3)  # difference better CoM and CoP
+        self.hm = 0.  # pendulum height times mass
+        self.az = 0.  # vertical force times mass
         self.tmp_hm2 = 0.
-
 
 
 def buildSRBMFromRobot(robot_model):
@@ -106,8 +104,10 @@ def buildSRBMFromRobot(robot_model):
     model.appendBodyToJoint(joint_com, body_inertia, body_placement)
     return model
 
+
 def generateVertexSet(foot_pos, foot_ori, foot_size):
-    Vs = np.array([[1, 1, 1], [-1, 1, 1], [-1, -1, 1], [1, -1, 1]]) * foot_size / 2  # distance of 4 vertexes from the center of foot
+    Vs = np.array([[1, 1, 1], [-1, 1, 1], [-1, -1, 1], [1, -1, 1]
+                   ]) * foot_size / 2  # distance of 4 vertexes from the center of foot
     vertex_set = np.zeros((3, 8))
     lfoot_pos = foot_pos[:3]
     rfoot_pos = foot_pos[3:]
@@ -146,47 +146,36 @@ def createPhaseModel(robot_model,
     runningCosts = crocoddyl.CostModelSum(state, 8)
     actuation = ActuationModelBipedContactVertex(state)
     actuation.set_reference(generateVertexSet(foot_pos, foot_ori, foot_size))
-    if support == 1: # Left support
-        uRef = np.hstack(
-            [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.25, 0.25, 0.25, 0.25, 0.0, 0.0, 0.0])
-    elif support == 0: # Double support
+    if support == 1:  # Left support
+        uRef = np.hstack([9.81 * pinocchio.computeTotalMass(robot_model.model), 0.25, 0.25, 0.25, 0.25, 0.0, 0.0, 0.0])
+    elif support == 0:  # Double support
         uRef = np.hstack(
             [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125])
-    elif support == -1: # Right support
-        uRef = np.hstack(
-            [9.81 * pinocchio.computeTotalMass(robot_model.model), 0.0, 0.0, 0.0, 0.0, 0.25, 0.25, 0.25])
+    elif support == -1:  # Right support
+        uRef = np.hstack([9.81 * pinocchio.computeTotalMass(robot_model.model), 0.0, 0.0, 0.0, 0.0, 0.25, 0.25, 0.25])
 
     xRef = xref
     Mu = mu
-    ub_x = np.hstack([cop, np.zeros(3)]) + np.array(
-        [0.3, 0.055, 0.95, 7., 7., 3])
-    lb_x = np.hstack([cop, np.zeros(3)]) + np.array(
-        [-0.3, -0.055, 0.75, -7., -7., -3])
+    ub_x = np.hstack([cop, np.zeros(3)]) + np.array([0.3, 0.055, 0.95, 7., 7., 3])
+    lb_x = np.hstack([cop, np.zeros(3)]) + np.array([-0.3, -0.055, 0.75, -7., -7., -3])
     # --------------- COM Constraints ------------------ #
     runningCosts.addCost(
         "comBox",
-        crocoddyl.CostModelResidual(
-            state,
-            crocoddyl.ActivationModelQuadraticBarrier(
-                crocoddyl.ActivationBounds(lb_x, ub_x)),
-            crocoddyl.ResidualModelState(state, xRef, actuation.nu)), wxbox)
+        crocoddyl.CostModelResidual(state,
+                                    crocoddyl.ActivationModelQuadraticBarrier(crocoddyl.ActivationBounds(lb_x, ub_x)),
+                                    crocoddyl.ResidualModelState(state, xRef, actuation.nu)), wxbox)
     # --------------- Track State Ref ------------------ #
     runningCosts.addCost(
         "comTrack",
-        crocoddyl.CostModelResidual(
-            state,
-            crocoddyl.ActivationModelWeightedQuad(Wx),
-            crocoddyl.ResidualModelState(state, xRef, actuation.nu)), wxreg)
+        crocoddyl.CostModelResidual(state, crocoddyl.ActivationModelWeightedQuad(Wx),
+                                    crocoddyl.ResidualModelState(state, xRef, actuation.nu)), wxreg)
     # --------------- Track Control Ref ------------------ #
     runningCosts.addCost("uTrack",
-                         crocoddyl.CostModelResidual(
-                             state, crocoddyl.ActivationModelWeightedQuad(Wu),
-                             crocoddyl.ResidualModelControl(state, uRef)),
-                         wutrack)  ## ||u||^2
+                         crocoddyl.CostModelResidual(state, crocoddyl.ActivationModelWeightedQuad(Wu),
+                                                     crocoddyl.ResidualModelControl(state, uRef)), wutrack)  ## ||u||^2
     # --------------- Minimize Control ------------------ #
-    runningCosts.addCost("uReg",
-                         crocoddyl.CostModelResidual(
-                             state, crocoddyl.ResidualModelControl(state, actuation.nu)),
+    runningCosts.addCost("uReg", crocoddyl.CostModelResidual(state,
+                                                             crocoddyl.ResidualModelControl(state, actuation.nu)),
                          wureg)  ## ||u||^2
     # --------------- Control Residual Constraint ------------------ #
     lb_dr = np.array([0.])
@@ -194,9 +183,7 @@ def createPhaseModel(robot_model,
     runningCosts.addCost(
         "Control Bound Constraint",
         crocoddyl.CostModelResidual(
-            state,
-            crocoddyl.ActivationModelQuadraticBarrier(
-                crocoddyl.ActivationBounds(lb_dr, ub_dr)),
+            state, crocoddyl.ActivationModelQuadraticBarrier(crocoddyl.ActivationBounds(lb_dr, ub_dr)),
             ControlBoundResidual(state, actuation.nu)), 1e2)
 
     # --------------- Asymmetric Friction Cone Constraint ------------------ #
@@ -206,10 +193,7 @@ def createPhaseModel(robot_model,
     runningCosts.addCost(
         "Asymmetric Constraint",
         crocoddyl.CostModelResidual(
-            state,
-            crocoddyl.ActivationModelQuadraticBarrier(
-                crocoddyl.ActivationBounds(lb_rf, ub_rf)),
-            Afcr), 5)
+            state, crocoddyl.ActivationModelQuadraticBarrier(crocoddyl.ActivationBounds(lb_rf, ub_rf)), Afcr), 5)
 
     model = DifferentialActionModelVariableHeightPendulum(multibody_state, runningCosts, actuation)
     model.get_support_index(support)
@@ -254,20 +238,20 @@ def plotComMotion(xs, us):
 
 
 if __name__ == "__main__":
-    foot_holds = np.array([[0.0, 0.0, 0.0], [0.0, -0.085, 0.05], [0.05, 0.0, 0.05],
-                           [0.1, 0.085, 0.1], [0.1, 0.0, 0.1]]) # footsteps given
+    foot_holds = np.array([[0.0, 0.0, 0.0], [0.0, -0.085, 0.05], [0.05, 0.0, 0.05], [0.1, 0.085, 0.1],
+                           [0.1, 0.0, 0.1]])  # footsteps given
     phase = np.array([0, 1, 0, -1, 0])  # 0: double, 1: left, -1: right
     len_steps = phase.shape[0]
     robot_model = example_robot_data.load("talos")
     ################ Foot Placement #############################################
-    foot_placements = np.zeros((len_steps, 6)) # :3, left support. 3:, right support
+    foot_placements = np.zeros((len_steps, 6))  # :3, left support. 3:, right support
     foot_orientations = np.zeros((len_steps, 6))
     foot_orientations[1:, 0] = np.deg2rad(15)
     foot_orientations[1:, 3] = np.deg2rad(-15)
     ######### Should not do this, directly generate footplacements instead generating from CoP #################
     for i in range(len_steps):
         if phase[i] == 0:
-            if i == 0 or i == len_steps-1:
+            if i == 0 or i == len_steps - 1:
                 foot_placements[i, 0] = foot_holds[i, 0]
                 foot_placements[i, 2] = foot_holds[i, 2]
                 foot_placements[i, 3] = foot_holds[i, 0]
@@ -276,16 +260,15 @@ if __name__ == "__main__":
                 foot_placements[i, 4] = foot_holds[i, 1] - 0.085
             else:
                 foot_placements[i, :] = foot_placements[i - 1, :]
-        elif phase[i] == -1: # right support
-            foot_placements[i, :3] = foot_holds[i+1, :]
+        elif phase[i] == -1:  # right support
+            foot_placements[i, :3] = foot_holds[i + 1, :]
             foot_placements[i, 1] = 0.085
             foot_placements[i, 3:] = foot_placements[i - 1, 3:]
-        elif phase[i] == 1: # left support
-            foot_placements[i, 3:] = foot_holds[i+2, :]
+        elif phase[i] == 1:  # left support
+            foot_placements[i, 3:] = foot_holds[i + 2, :]
             foot_placements[i, :3] = foot_placements[i - 1, :3]
             foot_placements[i, 4] = -0.085
     print('Foot placements are ', foot_placements)
-
 
     num_nodes_single_support = 20
     num_nodes_double_support = 10
@@ -304,71 +287,60 @@ if __name__ == "__main__":
         if phase[i] == 0:
             if i == 0:
                 for j in range(num_nodes_double_support):
-                    tmp_cop = foot_holds[0, :] + (
-                            foot_holds[1, :] -
-                            foot_holds[0, :]) * (j + 1) / num_nodes_double_support
+                    tmp_cop = foot_holds[0, :] + (foot_holds[1, :] - foot_holds[0, :]) * (j +
+                                                                                          1) / num_nodes_double_support
                     cop = np.vstack((cop, tmp_cop))
                     tmp_model = createPhaseModel(robot_model,
                                                  tmp_cop,
                                                  foot_placements[i, :],
                                                  foot_orientations[i, :],
                                                  support=phase[i],
-                                                 xref=np.array([
-                                                     0.0, 0.0,
-                                                     0.86 + tmp_cop[2], 0.1,
-                                                     0.0, 0.0
-                                                 ]))
+                                                 xref=np.array([0.0, 0.0, 0.86 + tmp_cop[2], 0.1, 0.0, 0.0]))
                     locoModel += [tmp_model]
             elif i == len(phase) - 1:
                 for j in range(num_nodes_double_support):
-                    tmp_cop = foot_holds[i - 1, :] + (
-                            foot_holds[i, :] - foot_holds[i - 1, :]) * (
-                                      j + 1) / num_nodes_double_support
+                    tmp_cop = foot_holds[i - 1, :] + (foot_holds[i, :] -
+                                                      foot_holds[i - 1, :]) * (j + 1) / num_nodes_double_support
                     cop = np.vstack((cop, tmp_cop))
                     tmp_model = createPhaseModel(robot_model,
                                                  tmp_cop,
                                                  foot_placements[i, :],
                                                  foot_orientations[i, :],
                                                  support=phase[i],
-                                                 xref=np.array([
-                                                     0.0, 0.0,
-                                                     0.86 + tmp_cop[2], 0.1,
-                                                     0.0, 0.0
-                                                 ]))
+                                                 xref=np.array([0.0, 0.0, 0.86 + tmp_cop[2], 0.1, 0.0, 0.0]))
                     locoModel += [tmp_model]
             else:
                 for j in range(num_nodes_double_support):
-                    tmp_cop = foot_holds[i - 1, :] + (
-                            foot_holds[i + 1, :] - foot_holds[i - 1, :]) * (
-                                      j + 1) / num_nodes_double_support
+                    tmp_cop = foot_holds[i - 1, :] + (foot_holds[i + 1, :] -
+                                                      foot_holds[i - 1, :]) * (j + 1) / num_nodes_double_support
                     cop = np.vstack((cop, tmp_cop))
                     tmp_model = createPhaseModel(robot_model,
                                                  tmp_cop,
                                                  foot_placements[i, :],
                                                  foot_orientations[i, :],
                                                  support=phase[i],
-                                                 xref=np.array([
-                                                     0.0, 0.0,
-                                                     0.86 + tmp_cop[2], 0.1,
-                                                     0.0, 0.0
-                                                 ]))
+                                                 xref=np.array([0.0, 0.0, 0.86 + tmp_cop[2], 0.1, 0.0, 0.0]))
                     locoModel += [tmp_model]
 
         if phase[i] == 1 or phase[i] == -1:
             locoModel += [
-                             createPhaseModel(robot_model,
-                                              foot_holds[i, :],
-                                              foot_placements[i, :],
-                                              foot_orientations[i, :],
-                                              support=phase[i],
-                                              xref=np.array([
-                                                  0.0, 0.0, 0.86 + tmp_cop[2], 0.1, 0.0, 0.0
-                                              ]))
-                         ] * num_nodes_single_support
+                createPhaseModel(robot_model,
+                                 foot_holds[i, :],
+                                 foot_placements[i, :],
+                                 foot_orientations[i, :],
+                                 support=phase[i],
+                                 xref=np.array([0.0, 0.0, 0.86 + tmp_cop[2], 0.1, 0.0, 0.0]))
+            ] * num_nodes_single_support
             for j in range(num_nodes_single_support):
                 cop = np.vstack((cop, foot_holds[i, :]))
-    x_ref_final = np.array([(foot_placements[-1,0]+foot_placements[-1,3])/2,(foot_placements[-1,1]+foot_placements[-1,4])/2,(foot_placements[-1,2]+foot_placements[-1,5])/2+0.86, 0., 0., 0.])
-    mT = createTerminalModel(robot_model, np.array([0.1, 0.0, 0.00]), foot_placements[-1, :], foot_orientations[-1, :], xref=x_ref_final)
+    x_ref_final = np.array([(foot_placements[-1, 0] + foot_placements[-1, 3]) / 2,
+                            (foot_placements[-1, 1] + foot_placements[-1, 4]) / 2,
+                            (foot_placements[-1, 2] + foot_placements[-1, 5]) / 2 + 0.86, 0., 0., 0.])
+    mT = createTerminalModel(robot_model,
+                             np.array([0.1, 0.0, 0.00]),
+                             foot_placements[-1, :],
+                             foot_orientations[-1, :],
+                             xref=x_ref_final)
 
     ##############################  Plot&Interpolate the data  #################################################
     # import matplotlib.pyplot as plt

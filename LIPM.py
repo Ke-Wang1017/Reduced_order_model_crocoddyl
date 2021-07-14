@@ -4,11 +4,9 @@ import time
 import math
 
 
-class DifferentialActionModelLinearInvertedPendulum(
-        crocoddyl.DifferentialActionModelAbstract):
+class DifferentialActionModelLinearInvertedPendulum(crocoddyl.DifferentialActionModelAbstract):
     def __init__(self, costs):
-        crocoddyl.DifferentialActionModelAbstract.__init__(
-            self, crocoddyl.StateVector(4), 2)  # nu = 1
+        crocoddyl.DifferentialActionModelAbstract.__init__(self, crocoddyl.StateVector(4), 2)  # nu = 1
         self.uNone = np.zeros(self.nu)
 
         self.m = 95.0
@@ -40,18 +38,15 @@ class DifferentialActionModelLinearInvertedPendulum(
         c_x, c_y, cdot_x, cdot_y = x
         u_x, u_y = u[0].item(), u[1].item()
 
-        data.Fx[:, :] = np.array([[self.g / self.xz, 0.0, 0.0, 0.0],
-                                  [0.0, self.g / self.xz, 0.0, 0.0]])
-        data.Fu[:] = np.array([[-self.g / self.xz, 0.0],
-                               [0.0, -self.g / self.xz]])
+        data.Fx[:, :] = np.array([[self.g / self.xz, 0.0, 0.0, 0.0], [0.0, self.g / self.xz, 0.0, 0.0]])
+        data.Fu[:] = np.array([[-self.g / self.xz, 0.0], [0.0, -self.g / self.xz]])
         self.costs.calcDiff(data.costs, x, u)
 
     def createData(self):
         return DifferentialActionDataLinearInvertedPendulum(self)
 
 
-class DifferentialActionDataLinearInvertedPendulum(
-        crocoddyl.DifferentialActionDataAbstract):
+class DifferentialActionDataLinearInvertedPendulum(crocoddyl.DifferentialActionDataAbstract):
     def __init__(self, model):
         crocoddyl.DifferentialActionDataAbstract.__init__(self, model)
         shared_data = crocoddyl.DataCollectorAbstract()
@@ -74,19 +69,12 @@ def createPhaseModel(cop,
     lb = np.hstack([cop, np.zeros(2)]) + np.array([-0.5, -0.1, -5., -5.])
     runningCosts.addCost(
         "comBox",
-        crocoddyl.CostModelState(
-            state,
-            crocoddyl.ActivationModelQuadraticBarrier(
-                crocoddyl.ActivationBounds(lb, ub)), xRef, 2), wxbox)
-    runningCosts.addCost(
-        "comReg",
-        crocoddyl.CostModelState(state,
-                                 crocoddyl.ActivationModelWeightedQuad(Wx),
-                                 xRef, 2), wxreg)
-    runningCosts.addCost("uReg",
-                         crocoddyl.CostModelControl(
-                             state, crocoddyl.ActivationModelWeightedQuad(Wu),
-                             uRef), wureg)  ## ||u||^2
+        crocoddyl.CostModelState(state, crocoddyl.ActivationModelQuadraticBarrier(crocoddyl.ActivationBounds(lb, ub)),
+                                 xRef, 2), wxbox)
+    runningCosts.addCost("comReg", crocoddyl.CostModelState(state, crocoddyl.ActivationModelWeightedQuad(Wx), xRef, 2),
+                         wxreg)
+    runningCosts.addCost("uReg", crocoddyl.CostModelControl(state, crocoddyl.ActivationModelWeightedQuad(Wu), uRef),
+                         wureg)  ## ||u||^2
     model = DifferentialActionModelLinearInvertedPendulum(runningCosts)
     return crocoddyl.IntegratedActionModelEuler(model, dt)
 

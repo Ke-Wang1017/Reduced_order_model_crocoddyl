@@ -3,10 +3,10 @@ import numpy as np
 from math import sqrt
 
 mu = 0.7
-x_p = np.array([mu / (sqrt(mu ** 2 + 1)), 0, 1 / (sqrt(mu ** 2 + 1))])
-x_n = np.array([-mu / (sqrt(mu ** 2 + 1)), 0, 1 / (sqrt(mu ** 2 + 1))])
-y_p = np.array([0, mu / (sqrt(mu ** 2 + 1)), 1 / (sqrt(mu ** 2 + 1))])
-y_n = np.array([0, -mu / (sqrt(mu ** 2 + 1)), 1 / (sqrt(mu ** 2 + 1))])
+x_p = np.array([mu / (sqrt(mu**2 + 1)), 0, 1 / (sqrt(mu**2 + 1))])
+x_n = np.array([-mu / (sqrt(mu**2 + 1)), 0, 1 / (sqrt(mu**2 + 1))])
+y_p = np.array([0, mu / (sqrt(mu**2 + 1)), 1 / (sqrt(mu**2 + 1))])
+y_n = np.array([0, -mu / (sqrt(mu**2 + 1)), 1 / (sqrt(mu**2 + 1))])
 
 ori_L = np.array([15.0, 10., 0.])
 ori_R = np.array([-15.0, 10., 0.])
