@@ -6,7 +6,7 @@ from util import rotRollPitchYaw
 
 class AsymmetricFrictionConeResidual(crocoddyl.ResidualModelAbstract):
     def __init__(self, state, nu, ori, mu, actuation):
-        crocoddyl.ResidualModelAbstract.__init__(self, state, 4, nu)
+        crocoddyl.ResidualModelAbstract.__init__(self, state, 4, nu, True, False, True)
         self.friction_x_p = np.zeros(3)
         self.friction_x_n = np.zeros(3)
         self.friction_y_p = np.zeros(3)
@@ -90,6 +90,3 @@ class AsymmetricFrictionConeResidual(crocoddyl.ResidualModelAbstract):
 #     def __init__(self,collector):
 #         crocoddyl.ResidualDataAbstract(self,collector)
         # self.actuation = collector.actuation.createData()
-
-
-

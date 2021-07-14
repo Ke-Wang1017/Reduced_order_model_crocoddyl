@@ -378,8 +378,7 @@ if __name__ == "__main__":
     u_init = np.array([931.95, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125])
     x_init = np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0])
     problem = crocoddyl.ShootingProblem(x_init, locoModel, mT)
-    # print(problem.nthreads)
-    # problem.nthreads = 1
+    problem.nthreads = 1
     solver = crocoddyl.SolverBoxFDDP(problem)
     log = crocoddyl.CallbackLogger()
     solver.setCallbacks([log, crocoddyl.CallbackVerbose()])
