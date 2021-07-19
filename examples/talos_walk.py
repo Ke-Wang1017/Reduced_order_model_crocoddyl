@@ -1,8 +1,9 @@
 import time
+
 import crocoddyl
-import pinocchio
-import numpy as np
 import example_robot_data
+import numpy as np
+import pinocchio
 import vhip
 
 
@@ -30,16 +31,16 @@ def generateVertexSet(foot_pos, foot_ori, foot_size):
     vertex_set = np.zeros((3, 8))
     lfoot_pos = foot_pos[:3]
     rfoot_pos = foot_pos[3:]
-    lfoot_ori = foot_ori[:3]
-    rfoot_ori = foot_ori[3:]
-    vertex_set[:, 0] = lfoot_pos + vhip.rotRollPitchYaw(lfoot_ori[0], lfoot_ori[1], lfoot_ori[2]).dot(Vs[0, :])
-    vertex_set[:, 1] = lfoot_pos + vhip.rotRollPitchYaw(lfoot_ori[0], lfoot_ori[1], lfoot_ori[2]).dot(Vs[1, :])
-    vertex_set[:, 2] = lfoot_pos + vhip.rotRollPitchYaw(lfoot_ori[0], lfoot_ori[1], lfoot_ori[2]).dot(Vs[2, :])
-    vertex_set[:, 3] = lfoot_pos + vhip.rotRollPitchYaw(lfoot_ori[0], lfoot_ori[1], lfoot_ori[2]).dot(Vs[3, :])
-    vertex_set[:, 4] = rfoot_pos + vhip.rotRollPitchYaw(rfoot_ori[0], rfoot_ori[1], rfoot_ori[2]).dot(Vs[0, :])
-    vertex_set[:, 5] = rfoot_pos + vhip.rotRollPitchYaw(rfoot_ori[0], rfoot_ori[1], rfoot_ori[2]).dot(Vs[1, :])
-    vertex_set[:, 6] = rfoot_pos + vhip.rotRollPitchYaw(rfoot_ori[0], rfoot_ori[1], rfoot_ori[2]).dot(Vs[2, :])
-    vertex_set[:, 7] = rfoot_pos + vhip.rotRollPitchYaw(rfoot_ori[0], rfoot_ori[1], rfoot_ori[2]).dot(Vs[3, :])
+    lfoot_ori = foot_ori[:4]
+    rfoot_ori = foot_ori[4:]
+    vertex_set[:, 0] = lfoot_pos + vhip.quaternion_rotation_matrix(lfoot_ori).dot(Vs[0, :])
+    vertex_set[:, 1] = lfoot_pos + vhip.quaternion_rotation_matrix(lfoot_ori).dot(Vs[1, :])
+    vertex_set[:, 2] = lfoot_pos + vhip.quaternion_rotation_matrix(lfoot_ori).dot(Vs[2, :])
+    vertex_set[:, 3] = lfoot_pos + vhip.quaternion_rotation_matrix(lfoot_ori).dot(Vs[3, :])
+    vertex_set[:, 4] = rfoot_pos + vhip.quaternion_rotation_matrix(rfoot_ori).dot(Vs[0, :])
+    vertex_set[:, 5] = rfoot_pos + vhip.quaternion_rotation_matrix(rfoot_ori).dot(Vs[1, :])
+    vertex_set[:, 6] = rfoot_pos + vhip.quaternion_rotation_matrix(rfoot_ori).dot(Vs[2, :])
+    vertex_set[:, 7] = rfoot_pos + vhip.quaternion_rotation_matrix(rfoot_ori).dot(Vs[3, :])
     return vertex_set
 
 
@@ -138,9 +139,12 @@ if __name__ == "__main__":
     robot_model = example_robot_data.load("talos")
     ################ Foot Placement #############################################
     foot_placements = np.zeros((len_steps, 6))  # :3, left support. 3:, right support
-    foot_orientations = np.zeros((len_steps, 6))
-    foot_orientations[1:, 0] = np.deg2rad(15)
-    foot_orientations[1:, 3] = np.deg2rad(-15)
+    foot_orientations = np.zeros((len_steps, 8))
+    # initialize with 0 orientation of quaternion
+    foot_orientations[:,3] = 1.
+    foot_orientations[:,7] = 1.
+    foot_orientations[1:, :4] = vhip.euler_to_quaternion(np.deg2rad(15), 0, 0)
+    foot_orientations[1:, 4:] = vhip.euler_to_quaternion(np.deg2rad(-15), 0, 0)
     ######### Should not do this, directly generate footplacements instead generating from CoP #################
     for i in range(len_steps):
         if phase[i] == 0:
