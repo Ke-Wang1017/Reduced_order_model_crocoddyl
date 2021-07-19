@@ -2,19 +2,6 @@ from math import sin,cos,sqrt
 import numpy as np
 import matplotlib.pyplot as plt
 
-def rotRollPitchYaw(roll, pitch, yaw):  # R_yaw*R_pitch*R_roll
-    R = np.array([[
-        cos(yaw) * cos(pitch),
-        cos(yaw) * sin(pitch) * sin(roll) - sin(yaw) * cos(roll),
-        cos(yaw) * sin(pitch) * cos(roll) + sin(yaw) * sin(roll)
-    ],
-                  [
-                      sin(yaw) * cos(pitch),
-                      sin(yaw) * sin(pitch) * sin(roll) + cos(yaw) * cos(roll),
-                      sin(yaw) * sin(pitch) * cos(roll) - cos(yaw) * sin(roll)
-                  ], [-sin(pitch), cos(pitch) * sin(roll), cos(pitch) * cos(roll)]])
-    return R
-
 def euler_to_quaternion(roll, pitch, yaw):
     qx = np.sin(roll / 2) * np.cos(pitch / 2) * np.cos(yaw / 2) - np.cos(roll / 2) * np.sin(pitch / 2) * np.sin(
         yaw / 2)
