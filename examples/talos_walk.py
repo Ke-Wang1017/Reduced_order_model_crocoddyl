@@ -31,16 +31,16 @@ def generateVertexSet(foot_pos, foot_ori, foot_size):
     vertex_set = np.zeros((3, 8))
     lfoot_pos = foot_pos[:3]
     rfoot_pos = foot_pos[3:]
-    lfoot_ori = foot_ori[:4]
-    rfoot_ori = foot_ori[4:]
-    vertex_set[:, 0] = lfoot_pos + vhip.quaternion_rotation_matrix(lfoot_ori).dot(Vs[0, :])
-    vertex_set[:, 1] = lfoot_pos + vhip.quaternion_rotation_matrix(lfoot_ori).dot(Vs[1, :])
-    vertex_set[:, 2] = lfoot_pos + vhip.quaternion_rotation_matrix(lfoot_ori).dot(Vs[2, :])
-    vertex_set[:, 3] = lfoot_pos + vhip.quaternion_rotation_matrix(lfoot_ori).dot(Vs[3, :])
-    vertex_set[:, 4] = rfoot_pos + vhip.quaternion_rotation_matrix(rfoot_ori).dot(Vs[0, :])
-    vertex_set[:, 5] = rfoot_pos + vhip.quaternion_rotation_matrix(rfoot_ori).dot(Vs[1, :])
-    vertex_set[:, 6] = rfoot_pos + vhip.quaternion_rotation_matrix(rfoot_ori).dot(Vs[2, :])
-    vertex_set[:, 7] = rfoot_pos + vhip.quaternion_rotation_matrix(rfoot_ori).dot(Vs[3, :])
+    R_l = foot_ori[:3, :]
+    R_r = foot_ori[3:, :]
+    vertex_set[:, 0] = lfoot_pos + R_l.dot(Vs[0, :])
+    vertex_set[:, 1] = lfoot_pos + R_l.dot(Vs[1, :])
+    vertex_set[:, 2] = lfoot_pos + R_l.dot(Vs[2, :])
+    vertex_set[:, 3] = lfoot_pos + R_l.dot(Vs[3, :])
+    vertex_set[:, 4] = rfoot_pos + R_r.dot(Vs[0, :])
+    vertex_set[:, 5] = rfoot_pos + R_r.dot(Vs[1, :])
+    vertex_set[:, 6] = rfoot_pos + R_r.dot(Vs[2, :])
+    vertex_set[:, 7] = rfoot_pos + R_r.dot(Vs[3, :])
     return vertex_set
 
 
@@ -137,16 +137,27 @@ if __name__ == "__main__":
     phase = np.array([0, 1, 0, -1, 0])  # 0: double, 1: left, -1: right
     len_steps = phase.shape[0]
     robot_model = example_robot_data.load("talos")
+    com_height = 0.86
+    num_nodes_single_support = 20
+    num_nodes_double_support = 10
+    dt = 6e-2
     ################ Foot Placement #############################################
     foot_placements = np.zeros((len_steps, 6))  # :3, left support. 3:, right support
-    foot_orientations = np.zeros((len_steps, 8))
-    # initialize with 0 orientation of quaternion
-    foot_orientations[:,3] = 1.
-    foot_orientations[:,7] = 1.
-    foot_orientations[1:, :4] = vhip.euler_to_quaternion(np.deg2rad(15), 0, 0)
-    foot_orientations[1:, 4:] = vhip.euler_to_quaternion(np.deg2rad(-15), 0, 0)
+    foot_orientations = np.zeros((len_steps, 6))
+    foot_orientations[1:, :3] = np.array([np.deg2rad(15), 0, 0])
+    foot_orientations[1:, 3:] = np.array([np.deg2rad(-15), 0, 0])
+    foot_orientations_rot_matrix = np.zeros((len_steps, 6, 3))
+    support_indexes = phase
+    support_durations = np.zeros(len_steps)
     ######### Should not do this, directly generate footplacements instead generating from CoP #################
     for i in range(len_steps):
+        # generate rotation matrix from rpy: [R_l;R_r]
+        foot_orientations_rot_matrix[i, :3, :] = pinocchio.utils.rpyToMatrix(foot_orientations[i, 0],
+                                                                             foot_orientations[i, 1],
+                                                                             foot_orientations[i, 2])
+        foot_orientations_rot_matrix[i, 3:, :] = pinocchio.utils.rpyToMatrix(foot_orientations[i, 3],
+                                                                             foot_orientations[i, 4],
+                                                                             foot_orientations[i, 5])
         if phase[i] == 0:
             if i == 0 or i == len_steps - 1:
                 foot_placements[i, 0] = foot_holds[i, 0]
@@ -165,22 +176,17 @@ if __name__ == "__main__":
             foot_placements[i, 3:] = foot_holds[i + 2, :]
             foot_placements[i, :3] = foot_placements[i - 1, :3]
             foot_placements[i, 4] = -0.085
-    print('Foot placements are ', foot_placements)
 
-    num_nodes_single_support = 20
-    num_nodes_double_support = 10
-    dt = 6e-2
-    support_indexes = phase
-    support_durations = np.zeros(len_steps)
-    for i in range(len_steps):
         if support_indexes[i] == 0:
             support_durations[i] = num_nodes_double_support * dt
         else:
             support_durations[i] = num_nodes_single_support * dt
 
-    locoModel = [createPhaseModel(robot_model, foot_holds[0, :], foot_placements[0, :], foot_orientations[0, :])]
+    print('Foot placements are ', foot_placements)
+    locoModel = [createPhaseModel(robot_model, foot_holds[0, :], foot_placements[0, :], foot_orientations_rot_matrix[0, :, :])]
     cop = np.zeros(3)
-    for i in range(len(phase)):
+
+    for i in range(len_steps):
         if phase[i] == 0:
             if i == 0:
                 for j in range(num_nodes_double_support):
@@ -190,9 +196,9 @@ if __name__ == "__main__":
                     tmp_model = createPhaseModel(robot_model,
                                                  tmp_cop,
                                                  foot_placements[i, :],
-                                                 foot_orientations[i, :],
+                                                 foot_orientations_rot_matrix[i, :, :],
                                                  support=phase[i],
-                                                 xref=np.array([0.0, 0.0, 0.86 + tmp_cop[2], 0.1, 0.0, 0.0]))
+                                                 xref=np.array([0.0, 0.0, com_height + tmp_cop[2], 0.1, 0.0, 0.0]))
                     locoModel += [tmp_model]
             elif i == len(phase) - 1:
                 for j in range(num_nodes_double_support):
@@ -202,9 +208,9 @@ if __name__ == "__main__":
                     tmp_model = createPhaseModel(robot_model,
                                                  tmp_cop,
                                                  foot_placements[i, :],
-                                                 foot_orientations[i, :],
+                                                 foot_orientations_rot_matrix[i, :, :],
                                                  support=phase[i],
-                                                 xref=np.array([0.0, 0.0, 0.86 + tmp_cop[2], 0.1, 0.0, 0.0]))
+                                                 xref=np.array([0.0, 0.0, com_height + tmp_cop[2], 0.1, 0.0, 0.0]))
                     locoModel += [tmp_model]
             else:
                 for j in range(num_nodes_double_support):
@@ -214,9 +220,9 @@ if __name__ == "__main__":
                     tmp_model = createPhaseModel(robot_model,
                                                  tmp_cop,
                                                  foot_placements[i, :],
-                                                 foot_orientations[i, :],
+                                                 foot_orientations_rot_matrix[i, :, :],
                                                  support=phase[i],
-                                                 xref=np.array([0.0, 0.0, 0.86 + tmp_cop[2], 0.1, 0.0, 0.0]))
+                                                 xref=np.array([0.0, 0.0, com_height + tmp_cop[2], 0.1, 0.0, 0.0]))
                     locoModel += [tmp_model]
 
         if phase[i] == 1 or phase[i] == -1:
@@ -224,19 +230,19 @@ if __name__ == "__main__":
                 createPhaseModel(robot_model,
                                  foot_holds[i, :],
                                  foot_placements[i, :],
-                                 foot_orientations[i, :],
+                                 foot_orientations_rot_matrix[i, :, :],
                                  support=phase[i],
-                                 xref=np.array([0.0, 0.0, 0.86 + tmp_cop[2], 0.1, 0.0, 0.0]))
+                                 xref=np.array([0.0, 0.0, com_height + tmp_cop[2], 0.1, 0.0, 0.0]))
             ] * num_nodes_single_support
             for j in range(num_nodes_single_support):
                 cop = np.vstack((cop, foot_holds[i, :]))
     x_ref_final = np.array([(foot_placements[-1, 0] + foot_placements[-1, 3]) / 2,
                             (foot_placements[-1, 1] + foot_placements[-1, 4]) / 2,
-                            (foot_placements[-1, 2] + foot_placements[-1, 5]) / 2 + 0.86, 0., 0., 0.])
+                            (foot_placements[-1, 2] + foot_placements[-1, 5]) / 2 + com_height, 0., 0., 0.])
     mT = createTerminalModel(robot_model,
                              np.array([0.1, 0.0, 0.00]),
                              foot_placements[-1, :],
-                             foot_orientations[-1, :],
+                             foot_orientations_rot_matrix[-1, :, :],
                              xref=x_ref_final)
 
     ##############################  Plot&Interpolate the data  #################################################
@@ -245,7 +251,7 @@ if __name__ == "__main__":
     # plt.show()
 
     u_init = np.array([931.95, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125])
-    x_init = np.array([0.0, 0.0, 0.86, 0.0, 0.0, 0.0])
+    x_init = np.array([0.0, 0.0, com_height, 0.0, 0.0, 0.0])
     problem = crocoddyl.ShootingProblem(x_init, locoModel, mT)
     problem.nthreads = 1
     solver = crocoddyl.SolverBoxFDDP(problem)
@@ -256,6 +262,7 @@ if __name__ == "__main__":
     print('Time of iteration consumed', time.time() - t0)
     vhip.plotComMotion(solver.xs, solver.us)
 
+    ########### Interpolates the trajectory with given frequency #######################################
     # swing_height = 0.10
     # swing_height_offset = 0.01
     # com_gain = [30.0, 7.5, 1.0]

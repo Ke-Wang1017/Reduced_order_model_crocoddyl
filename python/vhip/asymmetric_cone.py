@@ -1,8 +1,6 @@
 import crocoddyl
 import numpy as np
 from math import sqrt
-from util import quaternion_rotation_matrix
-
 
 class AsymmetricFrictionConeResidual(crocoddyl.ResidualModelAbstract):
     def __init__(self, state, nu, mu, ori):
@@ -54,8 +52,8 @@ class AsymmetricFrictionConeResidual(crocoddyl.ResidualModelAbstract):
             xn = np.array([-self.mu / (sqrt(self.mu**2 + 1)), 0, 1 / (sqrt(self.mu**2 + 1))])
             yp = np.array([0, self.mu / (sqrt(self.mu**2 + 1)), 1 / (sqrt(self.mu**2 + 1))])
             yn = np.array([0, -self.mu / (sqrt(self.mu**2 + 1)), 1 / (sqrt(self.mu**2 + 1))])
-            R_l = quaternion_rotation_matrix(self.ori[:4])
-            R_r = quaternion_rotation_matrix(self.ori[4:])
+            R_l = self.ori[:3, :]
+            R_r = self.ori[3:, :]
             xp_l = R_l.dot(xp)
             xn_l = R_l.dot(xn)
             yp_l = R_l.dot(yp)

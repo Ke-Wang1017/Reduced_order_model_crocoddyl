@@ -1,48 +1,4 @@
-from math import sin,cos,sqrt
-import numpy as np
 import matplotlib.pyplot as plt
-
-def euler_to_quaternion(roll, pitch, yaw):
-    qx = np.sin(roll / 2) * np.cos(pitch / 2) * np.cos(yaw / 2) - np.cos(roll / 2) * np.sin(pitch / 2) * np.sin(
-        yaw / 2)
-    qy = np.cos(roll / 2) * np.sin(pitch / 2) * np.cos(yaw / 2) + np.sin(roll / 2) * np.cos(pitch / 2) * np.sin(
-        yaw / 2)
-    qz = np.cos(roll / 2) * np.cos(pitch / 2) * np.sin(yaw / 2) - np.sin(roll / 2) * np.sin(pitch / 2) * np.cos(
-        yaw / 2)
-    qw = np.cos(roll / 2) * np.cos(pitch / 2) * np.cos(yaw / 2) + np.sin(roll / 2) * np.sin(pitch / 2) * np.sin(
-        yaw / 2)
-
-    return [qx, qy, qz, qw]
-
-def quaternion_rotation_matrix(Q):
-    """
-    Covert a quaternion into a full three-dimensional rotation matrix.
-
-    Input
-    :param Q: A 4 element array representing the quaternion (q0,q1,q2,q3)
-
-    Output
-    :return: A 3x3 element matrix representing the full 3D rotation matrix.
-             This rotation matrix converts a point in the local reference
-             frame to a point in the global reference frame.
-    """
-    # Extract the values from Q
-    qx = Q[0]
-    qy = Q[1]
-    qz = Q[2]
-    qw = Q[3]
-    # normalization
-    n = 1./ sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
-    qx *= n
-    qy *= n
-    qz *= n
-    qw *= n
-
-    return np.array(
-        [[1. - 2. * qy * qy - 2. * qz * qz, 2. * qx * qy - 2. * qz * qw, 2. * qx * qz + 2. * qy * qw],
-         [2. * qx * qy + 2. * qz * qw, 1. - 2. * qx * qx - 2. * qz * qz, 2. * qy * qz - 2. * qx * qw],
-         [2. * qx * qz - 2. * qy * qw, 2. * qy * qz + 2. * qx * qw, 1. - 2. * qx * qx - 2. * qy * qy]])
-
 
 def plotComMotion(xs, us):
     plt.rcParams["pdf.fonttype"] = 42
@@ -64,7 +20,4 @@ def plotComMotion(xs, us):
     plt.show()
     plt.plot(cz)
     plt.show()
-    # plt.plot(u_x)
-    # plt.show()
-    # plt.plot(u_y)
-    # plt.show()
+
